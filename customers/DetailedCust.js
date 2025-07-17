@@ -8,9 +8,14 @@ import {
   Switch,
   ScrollView,
   Alert,
+  Modal,
+  Image,
 } from "react-native";
 import tw from "tailwind-react-native-classnames";
 import Entypo from "@expo/vector-icons/Entypo";
+import Customers from "./Customers";
+import CustRelated from "./CustRelated";
+import jewel from "../assets/jewel.webp";
 
 const { height } = Dimensions.get("window");
 
@@ -18,6 +23,8 @@ const DetailedCust = ({ person, onClose }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateYAnim = useRef(new Animated.Value(height)).current;
   const [isVisited, setIsVisited] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState(null);
 
   useEffect(() => {
     if (person) {
@@ -61,9 +68,10 @@ const DetailedCust = ({ person, onClose }) => {
     );
   };
 
-  const relatedLoans = (personName)=>{
-    
-  }
+  const relatedLoans = (personName) => {
+    // Alert.alert(`NAME`, `name is ${personName}`);
+    setSelectedPerson(personName);
+  };
 
   return (
     <Animated.View
@@ -86,17 +94,20 @@ const DetailedCust = ({ person, onClose }) => {
       >
         <View style={tw`flex flex-row justify-end`}>
           <Entypo 
-              name="camera" 
-              size={24} 
-              color="black" 
-              style={tw`mx-2`} 
-              />
-          <Entypo 
-              onPress={()=>{relatedLoans(person.name)}}
-              name="list" 
-              size={24} 
-              color="black" 
-              style={tw`mx-2`} 
+          name="camera" 
+          size={24} 
+          color="black" 
+          style={tw`mx-2`} 
+          />
+          <Entypo
+            onPress={() => {
+              relatedLoans(person.name);
+              setModalVisible(true);
+            }}
+            name="list"
+            size={24}
+            color="black"
+            style={tw`mx-2`}
           />
         </View>
         <Text
@@ -126,9 +137,17 @@ const DetailedCust = ({ person, onClose }) => {
           <InfoRow label="Last Date" value={person.lastDate} />
           <InfoRow label="Response1" value={person.Response1} />
           <InfoRow label="Response2" value={person.Response2} />
+          <Image
+            source={jewel}
+            alt="jewel image"
+            style={[
+              tw`m-9 self-center`,
+              {resizeMode: "contain" },
+            ]}
+          />
 
           <View
-            style={tw`flex-row justify-between items-center border-t border-b py-2 border-gray-200`}
+            style={tw`flex-row justify-between items-center border-t border-b pb-2 border-gray-200`}
           >
             <Text style={tw`text-lg font-semibold text-gray-800`}>Visited</Text>
             <Switch
@@ -150,19 +169,33 @@ const DetailedCust = ({ person, onClose }) => {
         >
           <Text style={tw`text-white text-lg font-bold`}>Close</Text>
         </Pressable>
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <CustRelated
+            person={selectedPerson}
+            onClose={() => setModalVisible(false)}
+          />
+        </Modal>
       </View>
     </Animated.View>
   );
 };
 
 const InfoRow = ({ label, value }) => (
-  <View style={[tw`flex-row justify-between border-b py-2`, {borderBottomColor: "#7cc0d8"}]}>
+  <View
+    style={[
+      tw`flex-row justify-between border-b py-2`,
+      { borderBottomColor: "#7cc0d8" },
+    ]}
+  >
     <Text style={tw`text-base font-semibold text-gray-800`} numberOfLines={1}>
       {label}
     </Text>
-    <Text style={tw`text-base text-gray-700 flex-1 text-right`}>
-      {value}
-    </Text>
+    <Text style={tw`text-base text-gray-700 flex-1 text-right`}>{value}</Text>
   </View>
 );
 

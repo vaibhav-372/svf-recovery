@@ -1,12 +1,126 @@
-import { View, Text } from 'react-native'
-import React from 'react'
+import {
+  View,
+  Text,
+  FlatList,
+  Dimensions,
+  Pressable,
+  ScrollView,
+  Image,
+} from "react-native";
+import React, { useRef, useState } from "react";
+import tw from "tailwind-react-native-classnames";
+import CustomerData from "./Cust.json";
+import jewel from "../assets/jewel.webp";
 
-const CustRelated = () => {
+const { width, height } = Dimensions.get("window");
+
+const CustRelated = ({ person, onClose }) => {
+  const filteredData = CustomerData.filter(
+    (item) => item.name.toLowerCase() === person.toLowerCase()
+  );
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const flatListRef = useRef(null);
+
+  const onViewRef = useRef(({ viewableItems }) => {
+    if (viewableItems.length > 0) {
+      setCurrentIndex(viewableItems[0].index);
+    }
+  });
+  const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
+
+  const renderItem = ({ item }) => (
+    <ScrollView
+      style={[tw`p-4`, { width }]}
+      contentContainerStyle={{ minHeight: height }}
+    >
+      <View style={tw`border mb-5 p-4 rounded-lg bg-white`}>
+        <InfoRow label="Loan Created" value={item.loanCreated} />
+        <InfoRow label="Ornament" value={item.ornament} />
+        <InfoRow label="Last Date" value={item.lastDate} />
+        <InfoRow label="Amount" value={item.amount} />
+        <InfoRow label="Interest" value={item.interest} />
+        <InfoRow label="Tenure" value={item.tenure} />
+        <InfoRow label="Paid (Jama)" value={item.jama} />
+        <InfoRow label="Nominee Name" value={item.nomineeName} />
+        <InfoRow label="PT No" value={item.PtNo} />
+        <InfoRow label="Letter 1" value={item.letter1} />
+        <InfoRow label="Letter 2" value={item.letter2} />
+        <InfoRow label="Final Letter" value={item.finalLetter} />
+        <InfoRow label="Response 1" value={item.Response1} />
+        <InfoRow label="Response 2" value={item.Response2} />
+        <InfoRow label="Visited" value={item.visited === 1 ? "Yes" : "No"} />
+        <Image
+          source={jewel}
+          alt="jewel image"
+          style={[tw`self-center`,
+          { width: 300, height: 300, resizeMode: "contain" }]}
+          />
+      </View>
+    </ScrollView>
+  );
+
   return (
-    <View>
-      <Text>CustRelated</Text>
-    </View>
-  )
-}
+    <View style={tw`flex-1 bg-gray-100`}>
+      <Text style={tw`text-center text-xl font-bold my-4`}>
+        Related Records for {person}
+      </Text>
 
-export default CustRelated
+      {filteredData.length > 0 ? (
+        <>
+          <FlatList
+            ref={flatListRef}
+            data={filteredData}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id.toString()}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onViewableItemsChanged={onViewRef.current}
+            viewabilityConfig={viewConfigRef.current}
+          />
+
+          {filteredData.length > 1 && (
+            <View style={tw`flex-row justify-center my-4`}>
+              {filteredData.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    tw`h-2 w-2 rounded-full mx-1`,
+                    {
+                      backgroundColor:
+                        currentIndex === index ? "#7cc0d8" : "#ccc",
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+        </>
+      ) : (
+        <Text style={tw`text-center text-lg text-red-500`}>
+          No records found.
+        </Text>
+      )}
+
+      <Pressable
+        onPress={onClose}
+        style={[
+          tw`absolute bottom-10 self-center px-6 py-3 rounded-full`,
+          { backgroundColor: "#7cc0d8" },
+        ]}
+      >
+        <Text style={tw`text-white text-lg font-bold`}>Close</Text>
+      </Pressable>
+    </View>
+  );
+};
+
+const InfoRow = ({ label, value }) => (
+  <View style={tw`flex-row justify-between border-b py-2 border-gray-300`}>
+    <Text style={tw`text-base font-semibold text-gray-800 pr-4`}>{label}</Text>
+    <Text style={tw`text-base text-gray-700 flex-1 text-right`}>{value}</Text>
+  </View>
+);
+
+export default CustRelated;
