@@ -13,9 +13,9 @@ import {
 } from "react-native";
 import tw from "tailwind-react-native-classnames";
 import Entypo from "@expo/vector-icons/Entypo";
-import Customers from "./Customers";
 import CustRelated from "./CustRelated";
 import jewel from "../assets/jewel.webp";
+import CameraComponent from "./CameraComponent";
 
 const { height } = Dimensions.get("window");
 
@@ -25,10 +25,12 @@ const DetailedCust = ({ person, onClose }) => {
   const [isVisited, setIsVisited] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [capturedImage, setCapturedImage] = useState(null); // store captured image uri
 
   useEffect(() => {
     if (person) {
-      setIsVisited(person.visited === 1); // update toggle state based on person.visited
+      setIsVisited(person.visited === 1);
 
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -45,33 +47,31 @@ const DetailedCust = ({ person, onClose }) => {
     }
   }, [person]);
 
-  if (!person) return null;
-
   const handleToggle = () => {
-    // setIsVisited(previousState => !previousState);
     Alert.alert(
       "Confirm",
       isVisited ? "Mark as not visited?" : "Mark as visited?",
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Yes",
-          onPress: () => {
-            setIsVisited((previousState) => !previousState);
-            // handle backend update here if needed
-          },
+          onPress: () => setIsVisited((prev) => !prev),
         },
       ]
     );
   };
 
   const relatedLoans = (personName) => {
-    // Alert.alert(`NAME`, `name is ${personName}`);
     setSelectedPerson(personName);
   };
+
+  const handleCapture = (uri) => {
+    console.log("Captured URI: ", uri);
+    setCapturedImage(uri);
+    setCameraVisible(false);
+  };
+
+  if (!person) return null;
 
   return (
     <Animated.View
@@ -93,11 +93,12 @@ const DetailedCust = ({ person, onClose }) => {
         ]}
       >
         <View style={tw`flex flex-row justify-end`}>
-          <Entypo 
-          name="camera" 
-          size={24} 
-          color="black" 
-          style={tw`mx-2`} 
+          <Entypo
+            name="camera"
+            size={24}
+            color="black"
+            style={tw`mx-2`}
+            onPress={() => setCameraVisible(true)}
           />
           <Entypo
             onPress={() => {
@@ -110,6 +111,7 @@ const DetailedCust = ({ person, onClose }) => {
             style={tw`mx-2`}
           />
         </View>
+
         <Text
           style={[
             tw`text-center text-3xl font-bold mb-6`,
@@ -120,6 +122,7 @@ const DetailedCust = ({ person, onClose }) => {
         </Text>
 
         <ScrollView style={tw`px-2`}>
+          {/* Info Rows */}
           <InfoRow label="Area" value={person.area} />
           <InfoRow label="Nominee Name" value={person.nomineeName} />
           <InfoRow label="PT.no" value={person.PtNo} />
@@ -137,14 +140,26 @@ const DetailedCust = ({ person, onClose }) => {
           <InfoRow label="Last Date" value={person.lastDate} />
           <InfoRow label="Response1" value={person.Response1} />
           <InfoRow label="Response2" value={person.Response2} />
+
           <Image
             source={jewel}
-            alt="jewel image"
-            style={[
-              tw`m-9 self-center`,
-              {resizeMode: "contain" },
-            ]}
+            style={[tw`m-9 self-center`, { resizeMode: "contain" }]}
           />
+
+          {capturedImage && (
+            <View style={tw`my-4`}>
+              <Text
+                style={tw`text-center text-lg font-bold text-gray-800 mb-2`}
+              >
+                Captured Image
+              </Text>
+              <Image
+                source={{ uri: capturedImage }}
+                style={[tw`w-full h-64`, { borderRadius: 10 }]}
+                resizeMode="contain"
+              />
+            </View>
+          )}
 
           <View
             style={tw`flex-row justify-between items-center border-t border-b pb-2 border-gray-200`}
@@ -169,15 +184,18 @@ const DetailedCust = ({ person, onClose }) => {
         >
           <Text style={tw`text-white text-lg font-bold`}>Close</Text>
         </Pressable>
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={() => setModalVisible(false)}
-        >
+
+        <Modal animationType="slide" transparent={true} visible={modalVisible}>
           <CustRelated
             person={selectedPerson}
             onClose={() => setModalVisible(false)}
+          />
+        </Modal>
+
+        <Modal visible={cameraVisible} animationType="slide">
+          <CameraComponent
+            onCapture={handleCapture}
+            onClose={() => setCameraVisible(false)}
           />
         </Modal>
       </View>
