@@ -20,6 +20,7 @@ import CustRelated from "./CustRelated";
 import jewel from "../assets/jewel.webp";
 import CameraComponent from "./CameraComponent";
 import MapWebView from "./MapWebView";
+import ImageViewing from "react-native-image-viewing";
 
 const { height } = Dimensions.get("window");
 
@@ -31,6 +32,8 @@ const DetailedCust = ({ person, onClose }) => {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [cameraVisible, setCameraVisible] = useState(false);
   const [capturedImage, setCapturedImage] = useState(null);
+  const [ornamentViewVisible, setOrnamentViewVisible] = useState(false);
+  const [imageViewVisible, setImageViewVisible] = useState(false);
   const [customerResponse, setCustomerResponse] = useState("");
   const [selectedResponse, setSelectedResponse] = useState("");
 
@@ -209,10 +212,15 @@ const DetailedCust = ({ person, onClose }) => {
 
           <View style={tw`mt-5`}>
             <Text style={tw`text-lg font-semibold`}>Customer Ornament</Text>
-            <Image
-              source={jewel}
-              style={[tw`m-5 self-center`, { resizeMode: "contain" }]}
-            />
+            <TouchableOpacity onPress={() => setOrnamentViewVisible(true)}>
+              <Image
+                source={jewel}
+                style={[
+                  tw`m-5 self-center w-48 h-48`,
+                  { resizeMode: "cover" },
+                ]}
+              />
+            </TouchableOpacity>
           </View>
 
           {capturedImage && (
@@ -222,13 +230,16 @@ const DetailedCust = ({ person, onClose }) => {
               >
                 Captured Image
               </Text>
-              <Image
-                source={{ uri: capturedImage.imageUri }}
-                style={[tw`w-full h-64`, { borderRadius: 10 }]}
-                resizeMode="contain"
-              />
+              <TouchableOpacity onPress={() => setImageViewVisible(true)}>
+                <Image
+                  source={{ uri: capturedImage.imageUri }}
+                  style={[tw`w-full h-64`, { borderRadius: 10 }]}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
             </View>
           )}
+
           {capturedImage?.location && (
             <View style={tw`my-5`}>
               <Text
@@ -280,23 +291,46 @@ const DetailedCust = ({ person, onClose }) => {
             onClose={() => setCameraVisible(false)}
           />
         </Modal>
+
+        <ImageViewing
+          images={[{ uri: capturedImage?.imageUri }]}
+          imageIndex={0}
+          visible={imageViewVisible}
+          onRequestClose={() => setImageViewVisible(false)}
+        />
+
+        <ImageViewing
+          images={[require("../assets/jewel.webp")]}
+          imageIndex={0}
+          visible={ornamentViewVisible}
+          onRequestClose={() => setOrnamentViewVisible(false)}
+        />
       </View>
     </Animated.View>
   );
 };
 
-const InfoRow = ({ label, value }) => (
-  <View
-    style={[
-      tw`flex-row justify-between border-b py-2`,
-      { borderBottomColor: "#7cc0d8" },
-    ]}
-  >
-    <Text style={tw`text-base font-semibold text-gray-800`} numberOfLines={1}>
-      {label}
-    </Text>
-    <Text style={tw`text-base text-gray-700 flex-1 text-right`}>{value}</Text>
-  </View>
-);
+const InfoRow = ({ label, value }) => {
+  const isResponse = label === "Response1" || label === "Response2";
+
+  return (
+    <View
+      style={[
+        tw`flex-row justify-between border-b py-2`,
+        { borderBottomColor: "#7cc0d8" },
+      ]}
+    >
+      <Text style={tw`text-base font-semibold text-gray-800`} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={tw`text-base text-gray-700 flex-1 text-right`}>{value}</Text>
+      {isResponse && (
+        <View>
+          <Entypo name="dots-two-vertical" size={24} color="black" />
+        </View>
+      )}
+    </View>
+  );
+};
 
 export default DetailedCust;

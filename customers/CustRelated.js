@@ -6,10 +6,12 @@ import {
   Pressable,
   ScrollView,
   Image,
+  TouchableOpacity,
 } from "react-native";
 import React, { useRef, useState } from "react";
 import tw from "tailwind-react-native-classnames";
 import CustomerData from "./Cust.json";
+import ImageViewing from "react-native-image-viewing";
 import jewel from "../assets/jewel.webp";
 
 const { width, height } = Dimensions.get("window");
@@ -20,6 +22,7 @@ const CustRelated = ({ person, onClose }) => {
   );
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [imageViewVisible, setImageViewVisible] = useState(false);
   const flatListRef = useRef(null);
 
   const onViewRef = useRef(({ viewableItems }) => {
@@ -50,12 +53,16 @@ const CustRelated = ({ person, onClose }) => {
         <InfoRow label="Response 1" value={item.Response1} />
         <InfoRow label="Response 2" value={item.Response2} />
         <InfoRow label="Visited" value={item.visited === 1 ? "Yes" : "No"} />
-        <Image
-          source={jewel}
-          alt="jewel image"
-          style={[tw`self-center`,
-          { width: 300, height: 300, resizeMode: "contain" }]}
+        <TouchableOpacity onPress={() => setImageViewVisible(true)}>
+          <Image
+            source={jewel}
+            alt="jewel image"
+            style={[
+              tw`self-center`,
+              { width: 300, height: 300, resizeMode: "contain" },
+            ]}
           />
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -112,6 +119,12 @@ const CustRelated = ({ person, onClose }) => {
       >
         <Text style={tw`text-white text-lg font-bold`}>Close</Text>
       </Pressable>
+      <ImageViewing
+        images={[require("../assets/jewel.webp")]}
+        imageIndex={0}
+        visible={imageViewVisible}
+        onRequestClose={() => setImageViewVisible(false)}
+      />
     </View>
   );
 };
