@@ -13,6 +13,7 @@ import tw from "tailwind-react-native-classnames";
 import CustomerData from "./Cust.json";
 import ImageViewing from "react-native-image-viewing";
 import jewel from "../assets/jewel.webp";
+import { Ionicons } from "@expo/vector-icons";
 
 const { width, height } = Dimensions.get("window");
 
@@ -23,6 +24,7 @@ const CustRelated = ({ person, onClose }) => {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [imageViewVisible, setImageViewVisible] = useState(false);
+  const [responseImageVisible, setResponseImageVisible] = useState(false);
   const flatListRef = useRef(null);
 
   const onViewRef = useRef(({ viewableItems }) => {
@@ -50,8 +52,16 @@ const CustRelated = ({ person, onClose }) => {
         <InfoRow label="Letter 1" value={item.letter1} />
         <InfoRow label="Letter 2" value={item.letter2} />
         <InfoRow label="Final Letter" value={item.finalLetter} />
-        <InfoRow label="Response 1" value={item.Response1} />
-        <InfoRow label="Response 2" value={item.Response2} />
+        <InfoRow
+          label="Response 1"
+          value={person.Response1}
+          onResponseImagePress={() => setResponseImageVisible(true)}
+        />
+        <InfoRow
+          label="Response 2"
+          value={person.Response2}
+          onResponseImagePress={() => setResponseImageVisible(true)}
+        />
         <InfoRow label="Visited" value={item.visited === 1 ? "Yes" : "No"} />
         <TouchableOpacity onPress={() => setImageViewVisible(true)}>
           <Image
@@ -119,21 +129,45 @@ const CustRelated = ({ person, onClose }) => {
       >
         <Text style={tw`text-white text-lg font-bold`}>Close</Text>
       </Pressable>
+
       <ImageViewing
         images={[require("../assets/jewel.webp")]}
         imageIndex={0}
         visible={imageViewVisible}
         onRequestClose={() => setImageViewVisible(false)}
       />
+
+      <ImageViewing
+        images={[require("../assets/closed-house.webp")]}
+        imageIndex={0}
+        visible={responseImageVisible}
+        onRequestClose={() => setResponseImageVisible(false)}
+      />
     </View>
   );
 };
 
-const InfoRow = ({ label, value }) => (
-  <View style={tw`flex-row justify-between border-b py-2 border-gray-300`}>
-    <Text style={tw`text-base font-semibold text-gray-800 pr-4`}>{label}</Text>
-    <Text style={tw`text-base text-gray-700 flex-1 text-right`}>{value}</Text>
-  </View>
-);
+const InfoRow = ({ label, value, onResponseImagePress }) => {
+  const isResponse = label === "Response 1" || label === "Response 2";
+
+  return (
+    <View
+      style={[
+        tw`flex-row justify-between border-b py-2`,
+        { borderBottomColor: "#7cc0d8" },
+      ]}
+    >
+      <Text style={tw`text-base font-semibold text-gray-800`} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={tw`text-base text-gray-700 flex-1 text-right`}>{value}</Text>
+      {isResponse && (
+        <TouchableOpacity onPress={() => onResponseImagePress(label)}>
+          <Ionicons name="image" size={24} color="black" style={tw`ml-2`} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
 
 export default CustRelated;

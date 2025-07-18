@@ -150,12 +150,12 @@ const DetailedCust = ({ person, onClose }) => {
           <InfoRow label="Address" value={person.address} />
           <InfoRow label="Last Date" value={person.lastDate} />
           <InfoRow
-            label="Response1"
+            label="Response 1"
             value={person.Response1}
             onResponseImagePress={() => setResponseImageVisible(true)}
           />
           <InfoRow
-            label="Response2"
+            label="Response 2"
             value={person.Response2}
             onResponseImagePress={() => setResponseImageVisible(true)}
           />
@@ -326,7 +326,7 @@ const DetailedCust = ({ person, onClose }) => {
 };
 
 const InfoRow = ({ label, value, onResponseImagePress }) => {
-  const isResponse = label === "Response1" || label === "Response2";
+  const isResponse = label === "Response 1" || label === "Response 2";
 
   return (
     <View
