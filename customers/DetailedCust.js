@@ -21,6 +21,7 @@ import jewel from "../assets/jewel.webp";
 import CameraComponent from "./CameraComponent";
 import MapWebView from "./MapWebView";
 import ImageViewing from "react-native-image-viewing";
+import { Ionicons } from "@expo/vector-icons";
 
 const { height } = Dimensions.get("window");
 
@@ -34,6 +35,7 @@ const DetailedCust = ({ person, onClose }) => {
   const [capturedImage, setCapturedImage] = useState(null);
   const [ornamentViewVisible, setOrnamentViewVisible] = useState(false);
   const [imageViewVisible, setImageViewVisible] = useState(false);
+  const [responseImageVisible, setResponseImageVisible] = useState(false);
   const [customerResponse, setCustomerResponse] = useState("");
   const [selectedResponse, setSelectedResponse] = useState("");
 
@@ -147,8 +149,17 @@ const DetailedCust = ({ person, onClose }) => {
           <InfoRow label="Number" value={person.number} />
           <InfoRow label="Address" value={person.address} />
           <InfoRow label="Last Date" value={person.lastDate} />
-          <InfoRow label="Response1" value={person.Response1} />
-          <InfoRow label="Response2" value={person.Response2} />
+          <InfoRow
+            label="Response1"
+            value={person.Response1}
+            onResponseImagePress={() => setResponseImageVisible(true)}
+          />
+          <InfoRow
+            label="Response2"
+            value={person.Response2}
+            onResponseImagePress={() => setResponseImageVisible(true)}
+          />
+
           <View style={tw`mt-3`}>
             <Text style={tw`text-lg font-semibold text-gray-800 mb-1`}>
               Customer Response
@@ -215,10 +226,7 @@ const DetailedCust = ({ person, onClose }) => {
             <TouchableOpacity onPress={() => setOrnamentViewVisible(true)}>
               <Image
                 source={jewel}
-                style={[
-                  tw`m-5 self-center w-48 h-48`,
-                  { resizeMode: "cover" },
-                ]}
+                style={[tw`m-5 self-center w-48 h-48`, { resizeMode: "cover" }]}
               />
             </TouchableOpacity>
           </View>
@@ -305,12 +313,19 @@ const DetailedCust = ({ person, onClose }) => {
           visible={ornamentViewVisible}
           onRequestClose={() => setOrnamentViewVisible(false)}
         />
+
+        <ImageViewing
+          images={[require("../assets/closed-house.webp")]}
+          imageIndex={0}
+          visible={responseImageVisible}
+          onRequestClose={() => setResponseImageVisible(false)}
+        />
       </View>
     </Animated.View>
   );
 };
 
-const InfoRow = ({ label, value }) => {
+const InfoRow = ({ label, value, onResponseImagePress }) => {
   const isResponse = label === "Response1" || label === "Response2";
 
   return (
@@ -325,9 +340,9 @@ const InfoRow = ({ label, value }) => {
       </Text>
       <Text style={tw`text-base text-gray-700 flex-1 text-right`}>{value}</Text>
       {isResponse && (
-        <View>
-          <Entypo name="dots-two-vertical" size={24} color="black" />
-        </View>
+        <TouchableOpacity onPress={() => onResponseImagePress(label)}>
+          <Ionicons name="image" size={24} color="black" style={tw`ml-2`} />
+        </TouchableOpacity>
       )}
     </View>
   );
