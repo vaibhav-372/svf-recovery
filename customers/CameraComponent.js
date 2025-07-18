@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { View, Text, Image, TouchableOpacity, Alert } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import tw from 'tailwind-react-native-classnames';
+import React, { useEffect } from "react";
+import { View, Text, Image, TouchableOpacity, Alert } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
+import tw from "tailwind-react-native-classnames";
 
 export default function CameraComponent({ onCapture, onClose }) {
   const [image, setImage] = React.useState(null);
@@ -12,16 +13,28 @@ export default function CameraComponent({ onCapture, onClose }) {
 
   const openCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Camera permission is needed to take pictures.');
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission required",
+        "Camera permission is needed to take pictures."
+      );
       onClose(); // close modal if permission denied
+      return;
+    }
+
+    // get location permission
+    const { status: locationStatus } =
+      await Location.requestForegroundPermissionsAsync();
+    if (locationStatus !== "granted") {
+      Alert.alert("Permission required", "Location permission is needed.");
+      onClose();
       return;
     }
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
-      onClose
+      onClose,
     });
 
     console.log("Camera result: ", result);
@@ -29,8 +42,19 @@ export default function CameraComponent({ onCapture, onClose }) {
     if (!result.canceled) {
       const uri = result.assets ? result.assets[0].uri : result.uri;
       setImage(uri);
+
+      // get current location
+      const location = await Location.getCurrentPositionAsync({});
+      console.log("Location: ", location);
+
       if (onCapture) {
-        onCapture(uri);
+        onCapture({
+          imageUri: uri,
+          location: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          },
+        });
       }
     } else {
       onClose(); // close if user cancels
@@ -38,9 +62,8 @@ export default function CameraComponent({ onCapture, onClose }) {
   };
 
   useEffect(() => {
-    onClose()
-  }, [image])
-  
+    onClose();
+  }, [image]);
 
   return (
     <View style={tw`flex-1 justify-center items-center bg-white px-4`}>

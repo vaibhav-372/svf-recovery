@@ -10,12 +10,16 @@ import {
   Alert,
   Modal,
   Image,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
+import RNPickerSelect from "react-native-picker-select";
 import tw from "tailwind-react-native-classnames";
 import Entypo from "@expo/vector-icons/Entypo";
 import CustRelated from "./CustRelated";
 import jewel from "../assets/jewel.webp";
 import CameraComponent from "./CameraComponent";
+import MapWebView from "./MapWebView";
 
 const { height } = Dimensions.get("window");
 
@@ -26,7 +30,9 @@ const DetailedCust = ({ person, onClose }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [cameraVisible, setCameraVisible] = useState(false);
-  const [capturedImage, setCapturedImage] = useState(null); // store captured image uri
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [customerResponse, setCustomerResponse] = useState("");
+  const [selectedResponse, setSelectedResponse] = useState("");
 
   useEffect(() => {
     if (person) {
@@ -65,9 +71,9 @@ const DetailedCust = ({ person, onClose }) => {
     setSelectedPerson(personName);
   };
 
-  const handleCapture = (uri) => {
-    console.log("Captured URI: ", uri);
-    setCapturedImage(uri);
+  const handleCapture = (data) => {
+    console.log("Captured Data: ", data);
+    setCapturedImage(data);
     setCameraVisible(false);
   };
 
@@ -88,7 +94,7 @@ const DetailedCust = ({ person, onClose }) => {
     >
       <View
         style={[
-          tw`bg-white rounded-t-3xl w-full h-full px-6 pb-10`,
+          tw`bg-white rounded-t-3xl w-full h-full px-6 pb-5`,
           { paddingTop: 40 },
         ]}
       >
@@ -140,11 +146,74 @@ const DetailedCust = ({ person, onClose }) => {
           <InfoRow label="Last Date" value={person.lastDate} />
           <InfoRow label="Response1" value={person.Response1} />
           <InfoRow label="Response2" value={person.Response2} />
+          <View style={tw`mt-3`}>
+            <Text style={tw`text-lg font-semibold text-gray-800 mb-1`}>
+              Customer Response
+            </Text>
 
-          <Image
-            source={jewel}
-            style={[tw`m-9 self-center`, { resizeMode: "contain" }]}
-          />
+            <View style={tw`flex-row items-center`}>
+              <View
+                style={tw`flex-1 border border-gray-300 rounded-lg bg-white mr-2`}
+              >
+                <RNPickerSelect
+                  onValueChange={(value) => setSelectedResponse(value)}
+                  placeholder={{ label: "Select a response...", value: "" }}
+                  items={[
+                    { label: "Call not lifting", value: "Call not lifting" },
+                    {
+                      label: "Customer not at home",
+                      value: "Customer not at home",
+                    },
+                    { label: "Requested time", value: "Requested time" },
+                    { label: "Others", value: "Others" },
+                  ]}
+                  style={{
+                    inputAndroid: {
+                      ...tw`text-base text-gray-800 pl-3 pr-3`,
+                    },
+                    placeholder: {
+                      color: "gray",
+                    },
+                  }}
+                />
+              </View>
+
+              <TouchableOpacity
+                onPress={() => {
+                  console.log(
+                    "Saved Response:",
+                    selectedResponse,
+                    customerResponse
+                  );
+                  Alert.alert("Saved", "Customer response saved successfully");
+                  setSelectedResponse("");
+                  setCustomerResponse("");
+                }}
+                style={tw`bg-green-500 px-4 py-2 rounded-lg`}
+              >
+                <Text style={tw`text-white font-bold`}>Save</Text>
+              </TouchableOpacity>
+            </View>
+
+            {selectedResponse === "Others" && (
+              <TextInput
+                value={customerResponse}
+                onChangeText={setCustomerResponse}
+                placeholder="Enter customer response..."
+                multiline
+                numberOfLines={4}
+                style={tw`border border-gray-300 rounded-lg p-3 mt-3 text-base text-gray-800 bg-white`}
+              />
+            )}
+          </View>
+
+          <View style={tw`mt-5`}>
+            <Text style={tw`text-lg font-semibold`}>Customer Ornament</Text>
+            <Image
+              source={jewel}
+              style={[tw`m-5 self-center`, { resizeMode: "contain" }]}
+            />
+          </View>
 
           {capturedImage && (
             <View style={tw`my-4`}>
@@ -154,15 +223,28 @@ const DetailedCust = ({ person, onClose }) => {
                 Captured Image
               </Text>
               <Image
-                source={{ uri: capturedImage }}
+                source={{ uri: capturedImage.imageUri }}
                 style={[tw`w-full h-64`, { borderRadius: 10 }]}
                 resizeMode="contain"
               />
             </View>
           )}
+          {capturedImage?.location && (
+            <View style={tw`my-5`}>
+              <Text
+                style={tw`text-center text-lg font-bold text-gray-800 mb-1`}
+              >
+                Location of customer
+              </Text>
+              <MapWebView
+                latitude={capturedImage.location.latitude}
+                longitude={capturedImage.location.longitude}
+              />
+            </View>
+          )}
 
           <View
-            style={tw`flex-row justify-between items-center border-t border-b pb-2 border-gray-200`}
+            style={tw`flex-row justify-between items-center border-t border-b pb-20 border-gray-200`}
           >
             <Text style={tw`text-lg font-semibold text-gray-800`}>Visited</Text>
             <Switch
@@ -173,17 +255,17 @@ const DetailedCust = ({ person, onClose }) => {
               value={isVisited}
             />
           </View>
-        </ScrollView>
 
-        <Pressable
-          onPress={onClose}
-          style={[
-            tw`absolute bottom-5 self-center rounded-full px-10 py-3`,
-            { backgroundColor: "#7cc0d8" },
-          ]}
-        >
-          <Text style={tw`text-white text-lg font-bold`}>Close</Text>
-        </Pressable>
+          <Pressable
+            onPress={onClose}
+            style={[
+              tw`absolute bottom-5 self-center rounded-full px-10 py-3`,
+              { backgroundColor: "#7cc0d8" },
+            ]}
+          >
+            <Text style={tw`text-white text-lg font-bold`}>Close</Text>
+          </Pressable>
+        </ScrollView>
 
         <Modal animationType="slide" transparent={true} visible={modalVisible}>
           <CustRelated
