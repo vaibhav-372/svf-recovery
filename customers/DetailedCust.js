@@ -99,7 +99,7 @@ const DetailedCust = ({ person, onClose }) => {
     >
       <View
         style={[
-          tw`bg-white rounded-t-3xl w-full h-full px-6 pb-5`,
+          tw`bg-white rounded-t-3xl w-full h-full px-2 pb-5`,
           { paddingTop: 40 },
         ]}
       >
@@ -123,45 +123,120 @@ const DetailedCust = ({ person, onClose }) => {
           />
         </View>
 
-        <Text
-          style={[
-            tw`text-center text-3xl font-bold mb-6`,
-            { color: "#7cc0d8" },
-          ]}
-        >
-          {person.name}
-        </Text>
+        <View>
+          <Text
+            style={[
+              tw`text-center text-3xl font-bold mb-6`,
+              { color: "#7cc0d8" },
+            ]}
+          >
+            {person.name}
+          </Text>
+        </View>
 
         <ScrollView style={tw`px-2`}>
           {/* Info Rows */}
-          <InfoRow label="Area" value={person.area} />
-          <InfoRow label="Nominee Name" value={person.nomineeName} />
-          <InfoRow label="PT.no" value={person.PtNo} />
-          <InfoRow label="Loan Amount" value={person.amount} />
-          <InfoRow label="Paid" value={person.jama} />
-          <InfoRow label="Loan Created" value={person.loanCreated} />
-          <InfoRow label="Tenure" value={person.tenure} />
-          <InfoRow label="Interest" value={person.interest} />
-          <InfoRow label="Ornament" value={person.ornament} />
-          <InfoRow label="1st letter" value={person.letter1} />
-          <InfoRow label="2st letter" value={person.letter2} />
-          <InfoRow label="Final letter" value={person.finalLetter} />
-          <InfoRow label="Number" value={person.number} />
-          <InfoRow label="Address" value={person.address} />
-          <InfoRow label="Last Date" value={person.lastDate} />
-          <InfoRow
-            label="Response 1"
-            value={person.Response1}
-            onResponseImagePress={() => setResponseImageVisible(true)}
-          />
-          <InfoRow
-            label="Response 2"
-            value={person.Response2}
-            onResponseImagePress={() => setResponseImageVisible(true)}
-          />
+          <View
+            style={[
+              tw`border-2 rounded-lg p-4 mb-4`,
+              { borderColor: "#7cc0d8" },
+            ]}
+          >
+            <Text
+              style={[
+                tw`text-lg font-semibold mb-2`,
+                {
+                  color: "#7cc0d8",
+                  textShadowColor: "#000",
+                  textShadowOffset: { width: -1, height: 1 },
+                  textShadowRadius: 1,
+                },
+              ]}
+            >
+              Personal Information
+            </Text>
+            <InfoRow label="Area" value={person.area} />
+            <InfoRow label="Address" value={person.address} />
+            <InfoRow label="Ph.no" value={person.number} />
+            <InfoRow label="Nominee Name" value={person.nomineeName} />
+            <InfoRow label="PT.no" value={person.PtNo} />
+          </View>
+
+          <View
+            style={[
+              tw`border-2 rounded-lg p-4 mb-4`,
+              { borderColor: "#7cc0d8" },
+            ]}
+          >
+            <Text
+              style={[
+                tw`text-lg font-semibold text-gray-800 mb-2`,
+                {
+                  color: "#7cc0d8",
+                  textShadowColor: "#000",
+                  textShadowOffset: { width: -1, height: 1 },
+                  textShadowRadius: 1,
+                },
+              ]}
+            >
+              Loan Details
+            </Text>
+            <InfoRow label="Ornament" value={person.ornament} />
+            <InfoRow label="Loan Created" value={person.loanCreated} />
+            <InfoRow label="Loan Amount" value={person.amount} />
+            <InfoRow label="Interest" value={person.interest} />
+            <InfoRow label="Tenure" value={person.tenure} />
+            <InfoRow label="Paid" value={person.jama} />
+            <InfoRow label="Last Date" value={person.lastDate} />
+          </View>
+
+          <View
+            style={[
+              tw`border-2 rounded-lg p-4 mb-4`,
+              { borderColor: "#7cc0d8" },
+            ]}
+          >
+            <Text
+              style={[
+                tw`text-lg font-semibold mb-2`,
+                {
+                  color: "#7cc0d8",
+                  textShadowColor: "#000",
+                  textShadowOffset: { width: -1, height: 1 },
+                  textShadowRadius: 1,
+                },
+              ]}
+            >
+              Customer History
+            </Text>
+
+            <InfoRow label="1st letter" value={person.letter1} />
+            <InfoRow label="2nd letter" value={person.letter2} />
+            <InfoRow label="Final letter" value={person.finalLetter} />
+            <InfoRow
+              label="Response 1"
+              value={person.Response1}
+              onResponseImagePress={() => setResponseImageVisible(true)}
+            />
+            <InfoRow
+              label="Response 2"
+              value={person.Response2}
+              onResponseImagePress={() => setResponseImageVisible(true)}
+            />
+          </View>
 
           <View style={tw`mt-3`}>
-            <Text style={tw`text-lg font-semibold text-gray-800 mb-1`}>
+            <Text
+              style={[
+                tw`text-lg font-semibold mb-1`,
+                {
+                  color: "#7cc0d8",
+                  textShadowColor: "#000",
+                  textShadowOffset: { width: -1, height: 1 },
+                  textShadowRadius: 1,
+                },
+              ]}
+            >
               Customer Response
             </Text>
 
@@ -222,7 +297,19 @@ const DetailedCust = ({ person, onClose }) => {
           </View>
 
           <View style={tw`mt-5`}>
-            <Text style={tw`text-lg font-semibold`}>Customer Ornament</Text>
+            <Text
+              style={[
+                tw`text-lg font-semibold`,
+                {
+                  color: "#7cc0d8",
+                  textShadowColor: "#000",
+                  textShadowOffset: { width: -1, height: 1 },
+                  textShadowRadius: 1,
+                },
+              ]}
+            >
+              CUSTOMER ORNAMENT
+            </Text>
             <TouchableOpacity onPress={() => setOrnamentViewVisible(true)}>
               <Image
                 source={jewel}

@@ -1,6 +1,6 @@
 import { View, Text, TouchableOpacity, Modal } from 'react-native';
 import tw from 'tailwind-react-native-classnames';
-import DetailedHist from './detailedHist';
+import DetailedHist from '../history/detailedHist';
 import { useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 
