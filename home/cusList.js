@@ -8,11 +8,11 @@ const CusList = () => {
   const navigation = useNavigation();
 
   const people = [
-    { id: 1, number: 9999999999, name: 'Vaibhav', area: 'Rjy' },
-    { id: 2, number: 9999999999, name: 'Prasad', area: 'Dwl' },
-    { id: 3, number: 9999999999, name: 'Kiran', area: 'Rjn' },
-    { id: 4, number: 9999999999, name: 'Pavan', area: 'Kkd' },
-    { id: 5, number: 9999999999, name: 'Raju', area: 'Rjy' },
+    { id: 1, number: 9999999999, name: 'Vaibhav', city: 'Rjy' },
+    { id: 2, number: 9999999999, name: 'Prasad', city: 'Dwl' },
+    { id: 3, number: 9999999999, name: 'Kiran', city: 'Rjn' },
+    { id: 4, number: 9999999999, name: 'Pavan', city: 'Kkd' },
+    { id: 5, number: 9999999999, name: 'Raju', city: 'Rjy' },
   ];
 
     const handleViewMore = () => {
@@ -32,7 +32,7 @@ const CusList = () => {
           ]}        >
           <Text style={tw`flex-1 text-sm`}>{person.name}</Text>
           <Text style={tw`flex-1 text-sm text-center`}>{person.number}</Text>
-          <Text style={tw`flex-1 text-sm text-right`}>{person.area}</Text>
+          <Text style={tw`flex-1 text-sm text-right`}>{person.city}</Text>
         </View>
       ))}
       <Text 

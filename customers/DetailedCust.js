@@ -155,7 +155,7 @@ const DetailedCust = ({ person, onClose }) => {
             >
               Personal Information
             </Text>
-            <InfoRow label="Area" value={person.area} />
+            <InfoRow label="City" value={person.city} />
             <InfoRow label="Address" value={person.address} />
             <InfoRow label="Ph.no" value={person.number} />
             <InfoRow label="Nominee Name" value={person.nomineeName} />

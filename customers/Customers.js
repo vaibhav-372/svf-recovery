@@ -53,7 +53,7 @@ const Customers = () => {
           >
             <Text style={tw`flex-1 text-sm`}>{person.name}</Text>
             <Text style={tw`flex-1 text-sm text-center`}>{person.number}</Text>
-            <Text style={tw`flex-1 text-sm text-center`}>{person.area}</Text>
+            <Text style={tw`flex-1 text-sm text-center`}>{person.city}</Text>
             <Text style={tw`text-sm text-center`}>
               {person.visited ? "✔️" : "❌"}
             </Text>

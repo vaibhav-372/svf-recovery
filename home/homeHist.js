@@ -10,11 +10,11 @@ const HomeHist = () => {
   const navigation = useNavigation();
 
   const people = [
-    { name: 'Vaibhav', number: 9999999999, area: 'Rajahmundry', amount: 60000, date: '16 jul 2025' },
-    { name: 'Prasad', number: 9999999999, area: 'Dawaleshwaram', amount: 60000, date: '16 jul 2025' },
-    { name: 'Kiran', number: 9999999999, area: 'Rajanagaram', amount: 60000, date: '16 jul 2025' },
-    { name: 'Pavan', number: 9999999999, area: 'Kakinada', amount: 60000, date: '16 jul 2025' },
-    { name: 'Raju', number: 9999999999, area: 'Rajahmundry', amount: 60000, date: '16 jul 2025' },
+    { name: 'Vaibhav', number: 9999999999, city: 'Rajahmundry', amount: 60000, date: '16 jul 2025' },
+    { name: 'Prasad', number: 9999999999, city: 'Dawaleshwaram', amount: 60000, date: '16 jul 2025' },
+    { name: 'Kiran', number: 9999999999, city: 'Rajanagaram', amount: 60000, date: '16 jul 2025' },
+    { name: 'Pavan', number: 9999999999, city: 'Kakinada', amount: 60000, date: '16 jul 2025' },
+    { name: 'Raju', number: 9999999999, city: 'Rajahmundry', amount: 60000, date: '16 jul 2025' },
   ];
 
   const handlePress = (person) => {
@@ -45,7 +45,7 @@ const HomeHist = () => {
             </View>
             <View style={tw`flex justify-center items-end`}>
               <Text style={tw`text-lg font-bold text-gray-700`}>{person.amount}</Text>
-              <Text style={tw`text-sm text-gray-700`}>{person.area}</Text>
+              <Text style={tw`text-sm text-gray-700`}>{person.city}</Text>
             </View>
           </View>
         </TouchableOpacity>

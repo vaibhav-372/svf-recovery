@@ -31,18 +31,19 @@ const History = () => {
                 },
               ]}
             >
-              <View>
+              <View style={tw`flex-1`}>
                 <Text style={tw`text-lg font-bold`}>{person.name}</Text>
                 <Text style={tw`text-sm font-semibold text-gray-700`}>
                   {person.number}
                 </Text>
                 <Text style={tw`text-xs text-gray-700`}>{person.date}</Text>
               </View>
-              <View>
+              
+              <View style={tw`flex-1 items-end`}>
                 <Text style={tw`text-lg font-bold text-gray-700`}>
                   {person.amount}
                 </Text>
-                <Text style={tw`text-sm text-gray-700`}>{person.area}</Text>
+                <Text style={tw`text-sm text-gray-700`}>{person.city}</Text>
               </View>
             </View>
           </TouchableOpacity>

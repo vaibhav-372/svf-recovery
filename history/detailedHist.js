@@ -63,7 +63,7 @@ const DetailedHist = ({ person, onClose }) => {
         </Text>
 
         <ScrollView>
-          <InfoRow label="Area" value={person.area} />
+          <InfoRow label="City" value={person.city} />
           <InfoRow label="PT.no" value={person.PtNo} />
           <InfoRow label="Visted Date" value={person.visitDate} />
           <InfoRow label="Loan Amount" value={person.amount} />
