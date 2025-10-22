@@ -12,15 +12,19 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "ios": {
-      "supportsTablet": true
-    },
+    "ios": {},
     "android": {
+      "package": "com.svfrecovery.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -35,6 +39,12 @@
         }
       ],
       "expo-maps"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e056f9b5-7df9-4ac1-8be6-1f0aacbe2a0c"
+      }
+    },
+    "owner": "vaibhav_372"
   }
 }

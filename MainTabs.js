@@ -1,4 +1,3 @@
-// MainTabs.js
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +11,7 @@ const Tab = createBottomTabNavigator();
 
 const MainTabs = () => {
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1}}>
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,

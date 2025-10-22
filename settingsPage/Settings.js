@@ -7,6 +7,7 @@ import {
   Platform,
   Modal,
   ScrollView,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "tailwind-react-native-classnames";
@@ -14,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import customerData from "../customers/Cust.json";
 import DetailedCust from "../customers/DetailedCust";
+import { useAuth } from "../context/AuthContext";
 
 const Settings = () => {
   const profileImage = require("../assets/kohli.webp");
@@ -23,7 +25,16 @@ const Settings = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedDateText, setSelectedDateText] = useState("");
   const [selectedPerson, setSelectedPerson] = useState(null);
-  const [detailModalVisible, setDetailModalVisible] = useState(false); // new state for DetailedCust modal
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Logout", onPress: logout },
+    ]);
+  };
 
   const handleDateChange = (event, selectedDate) => {
     const currentDate = selectedDate || date;
@@ -74,7 +85,7 @@ const Settings = () => {
                   { color: "#7cc0d8" },
                 ]}
               >
-                Agent name
+                Kohli
               </Text>
             </View>
           </View>
@@ -92,7 +103,7 @@ const Settings = () => {
               >
                 +91 99999 99999
               </Text>
-            </View>            
+            </View>
           </View>
 
           {/* Reports with Date Picker */}
@@ -117,18 +128,26 @@ const Settings = () => {
           <View
             style={tw`flex-row justify-between items-center border-b border-gray-300 py-3`}
           >
-              <Text style={tw`text-gray-600 text-sm font-bold`}>
-                Total Visits
-              </Text>
-              <Text
-                style={[
-                  tw`text-lg font-semibold text-gray-800`,
-                  { color: "#7cc0d8" },
-                ]}
-              >
-                352
-              </Text>
-            </View>
+            <Text style={tw`text-gray-600 text-sm font-bold`}>
+              Total Visits
+            </Text>
+            <Text
+              style={[
+                tw`text-lg font-semibold text-gray-800`,
+                { color: "#7cc0d8" },
+              ]}
+            >
+              352
+            </Text>
+          </View>
+          <View>
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={tw`bg-red-500 mt-5 py-2 rounded-full items-center`}
+            >
+              <Text style={tw`text-white font-bold`}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 

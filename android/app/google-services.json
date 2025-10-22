@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "255462667819",
+    "project_id": "svf-recovery",
+    "storage_bucket": "svf-recovery.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:255462667819:android:2a345a390d21e956bd5c6e",
+        "android_client_info": {
+          "package_name": "com.svfrecovery.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAp3v-W4QI6mGaD0tc1IAiR5jhO3p9Uypc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

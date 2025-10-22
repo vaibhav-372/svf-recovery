@@ -14,28 +14,30 @@ tbl_emp_profile
     -entry_id                   AI
     -emp_id                     int
     -emp_name                   varchar(100)
-    -emp_role                   varchar(5)('admin', 'agent', 'operator')
-    -mobile1                    varchar(30)
-    -mobile2                    varchar(30)
+    -emp_user_name              varchar(20)
+    -emp_role                   varchar(10)('admin', 'agent', 'operator')
+    -mobile1                    varchar(10)
+    -mobile2                    varchar(20)
     -email                      varchar(100)
     -password                   varchar(100)
     -joined_date                Date
-    -last_login                 Date
+    -last_login                 Date  
     -status                     varchar(10)('active', 'inactive')
-    -visited_locations          int
+    -visited_locations          int 
     -worked_days                int
     -failed_tasks               int
     -completed_tasks            int
     -average_response_time      float   (optional)
-    -profile_image_url          varchar(255)
-    -created_date               DateTime 
-    -last_updated_date          DateTime    
-    -isBlocked                  boolean (indicates if the emp is blocked)
-    -isDeleted                  boolean (indicates if the emp is deleted)
-    -device_id                  varchar(50)
-    -created_by                 int
+    -profile_image_url          varchar(255) 
+    -isBlocked                  boolean (stops emp temporarily blocked)
+    -isDeleted                  boolean (indicates the emp as deleted but not removed from the database)
     -branch_id                  int
+    -created_by                 int
     -reffered_by                varchar(100)
+    -last_updated_date          DateTime    
+    -ip_address                 varchar(50)
+    -device_id                  varchar(50)
+    -created_date               DateTime 
 
 
 tbl_location_tracking       ---(optional)
@@ -53,13 +55,13 @@ tbl_auction_customers
     -pt_no                      int (unique identifier for the customer)
     -customer_id                int
     -customer_name              varchar(100)
-    -customer_photo_url         varchar(255) (optional, if an image is uploaded)
-    -city                       varchar(100)  (updated from area)
+    -customer_photo_url         varchar(255)
+    -city                       varchar(100)
     -address                    varchar(255)
     -contact_number1            int(10)
     -contact_number2            int(10)
     -nominee_name               varchar(100)
-    -nominee_contact_number     varchar(30) (optional)
+    -nominee_contact_number     varchar(30) 
     -ornament_name              varchar(100)
     -loan_created_date          DateTime
     -interest_rate              float 
@@ -68,13 +70,13 @@ tbl_auction_customers
     -tenure                     int
     -loan_amount                float
     -paid_amount                float (amount already paid by the customer)
-    -total_amount               float (total amount to be paid by the customer)
+    -total_amount               float (total amount to be paid by the customer including interest)
     -first_letter_date          Date
     -second_letter_date         Date
-    -final_letter_date          Date (optional, if a final letter is sent)
+    -final_letter_date          Date 
     -assigned_date              DateTime
     -last_date                  DateTime (last date to pay loan amount)
-    -created_by                 int (foreign key to tbl_emp_profile.emp_id)
+    -created_by                 int (foreign key to tbl_emp_profile.emp_id who assigned the entry)
     -branch_id                  int
     -device_id                  varchar(100)
 
@@ -87,8 +89,8 @@ tbl_assigned_agents
     -agent_id                    int (foreign key to tbl_emp_profile.emp_id)
     -assigned_date               DateTime 
     -isVisited                   boolean (indicates if the customer has been visited by an agent)
-    -identifier                  int (to track the unique identifier for the assignment)
-    -device_id                   varchar(100) (optional, to track the device used for assignment)
+    -identifier                  int (to track the unique set for the assignment)
+    -device_id                   varchar(100) (To track the device used for assignment)
     -created_by                  int (foreign key to tbl_emp_profile.emp_id)    
     -branch_id                   int
 
@@ -101,13 +103,13 @@ tbl_recovery_responses
     -customer_id                int (foreign key to tbl_recovery_customers.customer_id)
     -agent_id                   int (foreign key to tbl_profile.emp_id)
     -response_text              text
-    -response_status            int (0 for fail, 1 for success)
-    -response_timestamp         DateTime
-    -interest_amount            float (optional, if the response includes interest amount)
-    -image_url                  varchar(255) (optional, if an image is uploaded with the response)
-    -location_coordinates       json ({"latitude": float, "longitude": float}) (optional)
-    -completed_date             DateTime (optional, if the response is completed
-    -device_id                  varchar(100) (optional, to track the device used for the response)
+    -response_status            int (0 for fail, 1 for success) 
+    -response_timestamp         DateTime 
+    -interest_amount            float (interest from starting date to response date)
+    -image_url                  varchar(255) (image url of response)
+    -location_coordinates       json ({"latitude": float, "longitude": float})
+    -completed_date             DateTime (date of visit by the agent)
+    -device_id                  varchar(100) (To track the device used for the response)
     -branch_id                  int
     -last_updated_at            DateTime
 
@@ -117,23 +119,49 @@ tbl_recovery_notifications      -(optional)
     -notification_type          varchar(50)
     -message                    text
     -created_at                 DateTime
-    -device_id                  varchar(100) (optional, to track the device used for the notification)
+    -device_id                  varchar(100) (To track the device received the notification)
     -branch_id                  int 
 
+tbl_branch
+    -entry_id                   AI
+    -branch_id                  int 
+    -branch_name                varchar(50)
+    -branch_short_name          varchar(10)
+    -branch_code                int 
+    -branch_address             varchar(50)
+    -branch_short_address       varchar(10)
+    -branch_city                varchar(10)
+    -branch_landline            varchar(50)
+    -branch_contact1            varchar(13)
+    -branch_contact2            varchar(13)
+    -branch_contact3            varchar(13)
+    -branch_pincode             int
+    -ip_address                 varchar(50) (IP address system that added the branch)
+    -created_date               DateTime
+    -created_by                 int (foreign key to tbl_emp_profile.emp_id)
+    -status                     int([1 for 'active'], [0 for 'inactive']) 
 
     api_endpoints:
     admin:
-      - GET         admin/api/getAgents: Retrieve all agents
+      - POST        admin/api/createBranch: Create a new branch 
+      - GET         admin/api/getBranches: Retrieve all branches
+      - PUT         admin/api/updateBranch/:id: Update a specific branch by ID 
       - POST        admin/api/createAgent: Create a new agent
+      - GET         admin/api/getAgents: Retrieve all agents
       - PUT         admin/api/updateAgent/:id: Update a specific agent by ID
-      - DELETE      admin/api/deleteAgent/:id: Delete a specific agent by ID
-      - GET         admin/api/getCustomers: Retrieve all customers
-      - GET         agent/api/customers/ Retrieve all customers assigned to the agent
+      - DELETE      admin/api/deleteAgent/:id: Delete a specific agent by ID      
+      - GET         admin/api/getCustomers: Retrieve all customers 
+      - GET         agent/api/customers/ Retrieve all customers assigned to the agent 
       - GET         agent/api/customers/:id: Retrieve a specific customers by agent ID
       - GET         agent/api/responses/ Retrieve a all responses
       - GET         agent/api/responses/:id: Retrieve a specific response by agent ID
-      - POST        admin/api/createNotification: Create a new notification
+      - POST        admin/api/createNotification: Create a new notification 
       - GET         admin/api/getNotifications: Retrieve all notifications
+
+    operator:
+      - GET         operator/api/customers/ Retrieve all customers assigned to the operator
+      - GET         operator/api/customers/:id: Retrieve a specific customer by ID
+      - POST        operator/api/responses: Create a new response for a customer
 
     agent:
       - GET         agent/api/customers/ Retrieve all customers assigned to the agent
@@ -146,3 +174,4 @@ tbl_recovery_notifications      -(optional)
 
 
 * same PTno do not exist and can't be assigned to multiple agents      
+* same PTno can be assigned to multiple agents but only one agent can be assigned at a time 
