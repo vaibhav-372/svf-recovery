@@ -14,9 +14,13 @@ import CusList from "./cusList";
 import HomeCharts from "./homeCharts";
 import HomeHist from "./homeHist";
 import Ratings from "./Ratings";
+import { useAuth } from "../context/AuthContext";
 // import { Image } from 'react-native-svg'
 
 const Home = () => {
+
+    const { user, token } = useAuth();
+  
   const visits = 73;
   const total = 194;
   const progress = visits / total;
@@ -38,14 +42,14 @@ const Home = () => {
           {/* Optional location icon */}
           {/* <Ionicons name="location-outline" size={20} color="#7cc0d8" /> */}
           <Text style={tw`ml-1 text-base font-semibold text-gray-800`}>
-            Hi Vaibhav
+            Hi {user?.username}
           </Text>
-          <Ionicons
+          {/* <Ionicons
             name="chevron-down-outline"
             size={16}
             color="#4B5563"
             style={tw`ml-1`}
-          />
+          /> */}
         </View>
 
         {/* Right: PNL + Avatar */}

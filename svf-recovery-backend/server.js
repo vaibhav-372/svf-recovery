@@ -152,9 +152,10 @@ app.get('/api/customers', authenticateToken, (req, res) => {
 
     const getCustomersQuery = `
       SELECT 
-      tac.*
+      tac.*, taa.*
       FROM tbl_auction_customers as tac, tbl_assigned_agents as taa
       WHERE taa.assigned_agent_id = ? AND taa.is_closed = 0 AND tac.pt_no = taa.pt_no
+      Group BY tac.customer_id
       ORDER BY taa.assigned_at DESC
     `;
     
