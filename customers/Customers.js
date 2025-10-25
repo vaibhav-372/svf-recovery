@@ -9,8 +9,9 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  RefreshControl,
 } from "react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import tw from "tailwind-react-native-classnames";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
@@ -26,11 +27,31 @@ const Customers = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Configuration
   const SERVER_IP = "192.168.65.11";
   const BASE_URL = `http://${SERVER_IP}:3000/api`;
   const REQUEST_TIMEOUT = 10000;
+
+  // Enhanced visited status checker
+  const isCustomerVisited = (customer) => {
+    const isVisited = customer.isVisited;
+    const visited = customer.visited;
+    
+    // Check isVisited field
+    if (isVisited === 1 || isVisited === true || isVisited === '1' || isVisited === 'true') {
+      return true;
+    }
+    
+    // Check visited field
+    if (visited === 1 || visited === true || visited === '1' || visited === 'true') {
+      return true;
+    }
+    
+    return false;
+  };
 
   // Secure fetch wrapper
   const secureFetch = async (endpoint, options = {}) => {
@@ -67,24 +88,38 @@ const Customers = () => {
     }
   };
 
-  // Helper function to check if customer is visited (handles both boolean and number)
-  const isCustomerVisited = (customer) => {
-    return (
-      customer.isVisited === 1 ||
-      customer.isVisited === true ||
-      customer.visited === 1 ||
-      customer.visited === true
+  // Update customer visited status
+  const updateCustomerVisitedStatus = (customerId) => {
+    setCustomers(prevCustomers => 
+      prevCustomers.map(customer => 
+        customer.customer_id === customerId || customer.entry_id === customerId
+          ? { ...customer, isVisited: 1, visited: 1 }
+          : customer
+      )
     );
   };
 
-  // Fetch customers independently
-  const fetchCustomers = async () => {
+  // Fetch customers independently - useCallback to prevent unnecessary re-renders
+  const fetchCustomers = useCallback(async (showLoader = true, forceRefresh = false) => {
+    // Don't fetch if we already have data and it's not a force refresh
+    if (dataLoaded && !forceRefresh && customers.length > 0) {
+      console.log("Using cached customers data");
+      if (showLoader) {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       if (!token) {
         throw new Error("Authentication token is missing");
       }
 
-      setLoading(true);
+      if (showLoader) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       setError(null);
 
       console.log("Fetching customers in Customers component");
@@ -96,25 +131,35 @@ const Customers = () => {
       }
 
       if (data.success) {
-        // console.log('Customers fetched successfully', data.customers);
         const customersData = Array.isArray(data.customers)
           ? data.customers
           : [];
+        
+        console.log(`📥 Raw API response: ${customersData.length} customers received`);
+        
         const validatedCustomers = customersData.map((customer) => ({
           id: customer.entry_id || Math.random().toString(),
           name: customer.customer_name || "N/A",
           number: customer.contact_number1 || "N/A",
           city: customer.address || "N/A",
-          // Store the original value but also provide a computed boolean
-          isVisited: customer.isVisited || customer.visited || 0,
+          isVisited: customer.isVisited || 0,
+          visited: customer.visited || 0,
           // Include all original data for detailed view
           ...customer,
         }));
 
         setCustomers(validatedCustomers);
-        console.log(
-          `Fetched ${validatedCustomers.length} customers in Customers component`
-        );
+        setDataLoaded(true);
+        
+        // Analytics
+        const totalFromServer = customersData.length;
+        const visitedCount = customersData.filter(isCustomerVisited).length;
+        const nonVisitedCount = totalFromServer - visitedCount;
+        console.log('📊 SERVER DATA ANALYSIS:');
+        console.log(`   Total: ${totalFromServer}`);
+        console.log(`   Non-visited: ${nonVisitedCount}`);
+        console.log(`   Visited: ${visitedCount}`);
+        
       } else {
         throw new Error(data.message || "Failed to fetch customers");
       }
@@ -131,46 +176,74 @@ const Customers = () => {
       }
 
       setError(errorMessage);
-      Alert.alert("Error", errorMessage);
+      if (showLoader) {
+        Alert.alert("Error", errorMessage);
+      }
     } finally {
-      setLoading(false);
+      if (showLoader) {
+        setLoading(false);
+      } else {
+        setRefreshing(false);
+      }
     }
-  };
+  }, [token, dataLoaded, customers.length]);
+
+  // Manual refresh function
+  const handleRefresh = useCallback(() => {
+    console.log("Manual refresh triggered");
+    fetchCustomers(false, true); // Force refresh
+  }, [fetchCustomers]);
 
   useEffect(() => {
     // Check if data was passed from CusList component
     if (route.params?.customers && route.params?.preloaded) {
-      console.log("Using preloaded customers data");
+      console.log("Using preloaded customers data from CusList");
+      
       const preloadedCustomers = route.params.customers.map((customer) => ({
         id: customer.entry_id || Math.random().toString(),
         name: customer.customer_name || "N/A",
         number: customer.contact_number1 || "N/A",
         city: customer.address || "N/A",
-        isVisited: customer.isVisited || customer.visited || 0,
+        isVisited: customer.isVisited || 0,
+        visited: customer.visited || 0,
         ...customer,
       }));
+      
       setCustomers(preloadedCustomers);
+      setDataLoaded(true);
       setLoading(false);
-    } else {
-      // Fetch data independently if component opened directly
+      
+      console.log(`📊 PRELOAD DATA: ${preloadedCustomers.length} customers`);
+      
+    } else if (!dataLoaded) {
+      // Fetch data independently if component opened directly and no data is loaded
       console.log("Fetching customers independently");
       fetchCustomers();
     }
-  }, [route.params]);
-
-  // const handlePress = (person) => {
-  //   setSelectedPerson(person);
-  //   setModalVisible(true);
-  // };
+  }, [route.params, dataLoaded, fetchCustomers]);
 
   const handlePress = (person) => {
-    console.log("Person data passed to DetailedCust:", person);
+    console.log("👉 Customer selected:", person.name);
     setSelectedPerson(person);
     setModalVisible(true);
   };
 
-  const handleRefresh = () => {
-    fetchCustomers();
+  // Handle response saved callback from DetailedCust
+  const handleResponseSaved = (customerId) => {
+    console.log("✅ Response saved for customer:", customerId);
+    
+    // Update the customer's visited status immediately
+    updateCustomerVisitedStatus(customerId);
+    
+    // Close the modal
+    setModalVisible(false);
+    
+    // Show success message
+    Alert.alert(
+      "Success", 
+      "Response saved successfully! Customer marked as visited.",
+      [{ text: "OK" }]
+    );
   };
 
   const handleCall = (phoneNumber) => {
@@ -193,6 +266,14 @@ const Customers = () => {
       customer.city.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Separate non-visited and visited customers
+  const nonVisitedCustomers = filteredCustomers.filter(customer => !isCustomerVisited(customer));
+  const visitedCustomers = filteredCustomers.filter(isCustomerVisited);
+
+  // Calculate totals
+  const totalNonVisited = customers.filter(customer => !isCustomerVisited(customer)).length;
+  const totalVisited = customers.filter(isCustomerVisited).length;
+
   if (loading) {
     return (
       <View style={tw`flex-1 bg-white justify-center items-center`}>
@@ -207,7 +288,7 @@ const Customers = () => {
       <View style={tw`flex-1 bg-white justify-center items-center p-4`}>
         <Text style={tw`text-gray-600 text-xs text-center mb-4`}>{error}</Text>
         <TouchableOpacity
-          onPress={fetchCustomers}
+          onPress={() => fetchCustomers(true, true)}
           style={[tw`px-3 py-1 rounded-lg`, { backgroundColor: "#7cc0d8" }]}
         >
           <Text style={tw`text-white font-semibold text-xs`}>Try Again</Text>
@@ -220,6 +301,14 @@ const Customers = () => {
     <ScrollView
       style={tw`flex-1 bg-white`}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={["#7cc0d8"]}
+          tintColor="#7cc0d8"
+        />
+      }
     >
       <View style={tw`p-3`}>
         <View style={tw`flex-row justify-between items-center mb-3`}>
@@ -227,17 +316,16 @@ const Customers = () => {
             Customer List{" "}
             {route.params?.agentName ? `- ${route.params.agentName}` : ""}
           </Text>
-          <TouchableOpacity onPress={handleRefresh}>
-            <Text style={[tw`font-semibold text-xs`, { color: "#7cc0d8" }]}>
-              🔄 Refresh
-            </Text>
+          <TouchableOpacity onPress={handleRefresh} disabled={refreshing}>
+            {refreshing ? (
+              <ActivityIndicator size="small" color="#7cc0d8" />
+            ) : (
+              <Text style={[tw`font-semibold text-xs`, { color: "#7cc0d8" }]}>
+                🔄 Refresh
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
-
-        <Text style={tw`text-gray-600 text-xs mb-3`}>
-          Total: {customers.length} customers
-          {route.params?.preloaded && " (Preloaded)"}
-        </Text>
 
         {/* Search Bar */}
         <View
@@ -251,38 +339,38 @@ const Customers = () => {
             style={tw`ml-2 flex-1 text-sm`}
             placeholderTextColor="gray"
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <Ionicons name="close-circle" size={16} color="gray" />
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Customer Cards */}
-        {filteredCustomers.length === 0 ? (
-          <View style={tw`items-center p-6`}>
-            <Text style={tw`text-gray-600 text-xs text-center`}>
-              {searchQuery
-                ? "No customers found matching your search"
-                : "No customers available"}
-            </Text>
-          </View>
-        ) : (
-          filteredCustomers.map((person) => {
-            const isVisited = isCustomerVisited(person);
-
-            return (
+        {/* Pending Customers Section - At Top */}
+        {nonVisitedCustomers.length > 0 && (
+          <View style={tw`mb-6`}>
+            <View style={tw`flex-row items-center justify-between mb-3`}>
+              <Text style={tw`text-base font-bold text-red-600`}>
+                Pending Customers ({nonVisitedCustomers.length}) / ({customers.length})
+              </Text>
+              <View style={[tw`px-2 py-1 rounded-full`, { backgroundColor: '#fee2e2' }]}>
+                <Text style={[tw`text-xs font-semibold`, { color: '#991b1b' }]}>
+                  Action Required
+                </Text>
+              </View>
+            </View>
+            
+            {nonVisitedCustomers.map((person) => (
               <TouchableOpacity
                 onPress={() => handlePress(person)}
                 key={person.id}
                 style={[
                   tw`p-3 rounded-lg mb-2 border`,
-                  isVisited
-                    ? {
-                        backgroundColor: "#f0f9f0",
-                        borderLeftColor: "#10b981",
-                        borderLeftWidth: 7,
-                      }
-                    : {
-                        backgroundColor: "#fef2f2",
-                        borderLeftColor: "#ef4444",
-                        borderLeftWidth: 7,
-                      },
+                  {
+                    backgroundColor: "#fef2f2",
+                    borderLeftColor: "#ef4444",
+                    borderLeftWidth: 7,
+                  }
                 ]}
               >
                 <View style={tw`flex-row justify-between items-start`}>
@@ -311,33 +399,114 @@ const Customers = () => {
                   <View
                     style={[
                       tw`px-2 py-1 rounded-full`,
-                      isVisited
-                        ? { backgroundColor: "#d1fae5" }
-                        : { backgroundColor: "#fee2e2" },
+                      { backgroundColor: "#fee2e2" }
                     ]}
                   >
                     <Text
                       style={[
                         tw`text-xs font-semibold`,
-                        isVisited ? { color: "#065f46" } : { color: "#991b1b" },
+                        { color: "#991b1b" },
                       ]}
                     >
-                      {isVisited ? "Visited" : "Pending"}
+                      Pending
                     </Text>
                   </View>
                 </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
-                {/* {isVisited && (
-                  <View style={tw`flex-row items-center mt-2 pt-1 border-t border-gray-200`}>
-                    <Ionicons name="checkmark-circle" size={12} color="#10b981" />
-                    <Text style={tw`text-xs text-green-700 ml-1`}>
-                      Already visited
+        {/* Visited Customers Section - At Bottom in Green */}
+        {visitedCustomers.length > 0 && (
+          <View style={tw`mb-4`}>
+            <View style={tw`flex-row items-center justify-between mb-3`}>
+              <Text style={tw`text-base font-bold text-green-600`}>
+                Completed Visits ({visitedCustomers.length}) / ({customers.length})
+              </Text>
+              <View style={[tw`px-2 py-1 rounded-full`, { backgroundColor: '#d1fae5' }]}>
+                <Text style={[tw`text-xs font-semibold`, { color: '#065f46' }]}>
+                  Completed
+                </Text>
+              </View>
+            </View>
+            
+            {visitedCustomers.map((person) => (
+              <TouchableOpacity
+                onPress={() => handlePress(person)}
+                key={person.id}
+                style={[
+                  tw`p-3 rounded-lg mb-2 border`,
+                  {
+                    backgroundColor: "#f0f9f0",
+                    borderLeftColor: "#10b981",
+                    borderLeftWidth: 7,
+                  }
+                ]}
+              >
+                <View style={tw`flex-row justify-between items-start`}>
+                  <View style={tw`flex-1 mr-2`}>
+                    <Text style={tw`text-sm font-bold text-gray-800`}>
+                      {person.name}
+                    </Text>
+                    <View style={tw`flex-row items-center mt-1`}>
+                      <TouchableOpacity
+                        onPress={() => handleCall(person.number)}
+                        style={tw`flex-row items-center`}
+                      >
+                        <Ionicons name="call" size={12} color="#3b82f6" />
+                        <Text style={tw`text-xs text-blue-500 ml-1`}>
+                          {person.number}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={tw`flex-row items-center mt-1`}>
+                      <Ionicons name="location" size={10} color="#6b7280" />
+                      <Text style={tw`text-xs text-gray-500 ml-1`}>
+                        {person.address}
+                      </Text>
+                    </View>
+                  </View>
+                  <View
+                    style={[
+                      tw`px-2 py-1 rounded-full`,
+                      { backgroundColor: "#d1fae5" }
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        tw`text-xs font-semibold`,
+                        { color: "#065f46" },
+                      ]}
+                    >
+                      Visited
                     </Text>
                   </View>
-                )} */}
+                </View>
               </TouchableOpacity>
-            );
-          })
+            ))}
+          </View>
+        )}
+
+        {/* No Results Message */}
+        {filteredCustomers.length === 0 && (
+          <View style={tw`items-center p-6`}>
+            <Ionicons name="search" size={32} color="#9ca3af" />
+            <Text style={tw`text-gray-600 text-xs mt-2 text-center`}>
+              {searchQuery
+                ? "No customers found matching your search"
+                : "No customers available"
+              }
+            </Text>
+            {searchQuery && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery("")}
+                style={[tw`px-3 py-1 rounded-lg mt-2`, { backgroundColor: "#7cc0d8" }]}
+              >
+                <Text style={tw`text-white font-semibold text-xs`}>Clear Search</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
 
@@ -351,6 +520,7 @@ const Customers = () => {
         <DetailedCust
           person={selectedPerson}
           onClose={() => setModalVisible(false)}
+          onResponseSaved={handleResponseSaved}
         />
       </Modal>
     </ScrollView>

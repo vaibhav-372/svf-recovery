@@ -10,11 +10,11 @@ import {
 import tw from "tailwind-react-native-classnames";
 import { Ionicons } from "@expo/vector-icons";
 import * as Progress from "react-native-progress";
-import CusList from "./cusList";
-import HomeCharts from "./homeCharts";
-import HomeHist from "./homeHist";
+import HomeCharts from "./HomeCharts";
+import HomeHist from "./HomeHist";
 import Ratings from "./Ratings";
 import { useAuth } from "../context/AuthContext";
+import CusList from "./cusList";
 // import { Image } from 'react-native-svg'
 
 const Home = () => {

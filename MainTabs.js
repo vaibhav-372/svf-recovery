@@ -2,7 +2,7 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Home from "./home/home";
+import Home from "./home/Home";
 import Customers from "./customers/Customers";
 import History from "./history/History";
 import Settings from "./settingsPage/Settings";

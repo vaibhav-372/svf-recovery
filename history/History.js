@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, Modal, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "tailwind-react-native-classnames";
-import DetailedHist from "./detailedHist";
+import DetailedHist from "./DetailedHist";
 import CustomerData from "../customers/Cust.json";
 import { useState } from "react";
 
