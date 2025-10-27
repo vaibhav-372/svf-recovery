@@ -8,12 +8,16 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
+  TextInput,
 } from "react-native";
 import React, { useRef, useState, useEffect } from "react";
 import tw from "tailwind-react-native-classnames";
 import ImageViewing from "react-native-image-viewing";
 import jewel from "../assets/jewel.webp";
 import { Ionicons } from "@expo/vector-icons";
+import RNPickerSelect from "react-native-picker-select";
+import { useAuth } from "../context/AuthContext";
 
 const { width, height } = Dimensions.get("window");
 
@@ -109,18 +113,82 @@ const CustRelated = ({ person, onClose }) => {
   const [customerRecords, setCustomerRecords] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [imageViewVisible, setImageViewVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [individualResponses, setIndividualResponses] = useState({});
+  const [existingResponses, setExistingResponses] = useState({});
   const flatListRef = useRef(null);
+
+  const { token } = useAuth();
+  const SERVER_IP = "192.168.65.11";
+  const BASE_URL = `http://${SERVER_IP}:3000`;
 
   useEffect(() => {
     console.log("CustRelated received:", person);
 
     if (person && person.allPTs) {
-      setCustomerRecords(person.allPTs);
-      console.log(`Loaded ${person.allPTs.length} PT records`);
+      const records = person.allPTs;
+      setCustomerRecords(records);
+
+      // Initialize individual responses state and load existing responses
+      const initialResponses = {};
+      records.forEach((record) => {
+        const ptNo = record.pt_no;
+        initialResponses[ptNo] = {
+          response: "",
+          description: "",
+        };
+      });
+
+      setIndividualResponses(initialResponses);
+      loadExistingResponses(records);
+
+      console.log(`Loaded ${records.length} PT records`);
     } else {
       setCustomerRecords([]);
+      setIndividualResponses({});
+      setExistingResponses({});
     }
   }, [person]);
+
+  // Load existing responses for all PT numbers
+  const loadExistingResponses = async (records) => {
+    try {
+      const customerId = person.customerInfo.customer_id;
+      const response = await fetch(
+        `${BASE_URL}/api/get-existing-responses/${customerId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.existingResponses) {
+          setExistingResponses(result.existingResponses);
+
+          // Pre-fill individual responses with existing data
+          const updatedResponses = { ...individualResponses };
+          records.forEach((record) => {
+            const ptNo = record.pt_no;
+            const existingResponse = result.existingResponses[ptNo];
+            if (existingResponse) {
+              updatedResponses[ptNo] = {
+                response: existingResponse.response_text || "",
+                description: existingResponse.response_description || "",
+              };
+            }
+          });
+          setIndividualResponses(updatedResponses);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading existing responses:", error);
+    }
+  };
 
   const onViewRef = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) {
@@ -174,15 +242,14 @@ const CustRelated = ({ person, onClose }) => {
     }
 
     let minimum_days_for_interest;
-    
-    if(rate == '24'){
-      minimum_days_for_interest = 15
-    }
-    else{
-      minimum_days_for_interest = 30
+
+    if (rate == "24") {
+      minimum_days_for_interest = 15;
+    } else {
+      minimum_days_for_interest = 30;
     }
 
-    console.log('rate of interest:', rate);
+    console.log("rate of interest:", rate);
 
     const result = calculateLoanInterest(
       principal,
@@ -206,7 +273,130 @@ const CustRelated = ({ person, onClose }) => {
     return "Customer";
   };
 
+  // Handle individual response change
+  const handleIndividualResponseChange = (ptNo, field, value) => {
+    setIndividualResponses((prev) => ({
+      ...prev,
+      [ptNo]: {
+        ...prev[ptNo],
+        [field]: value,
+      },
+    }));
+  };
+
+  // Save individual text response for specific PT number
+  const saveIndividualResponse = async (ptNo) => {
+    const responseData = individualResponses[ptNo];
+
+    if (!responseData || !responseData.response) {
+      Alert.alert(
+        "Response Required",
+        "Please select a response for this PT number."
+      );
+      return;
+    }
+
+    if (
+      responseData.response === "Others" &&
+      !responseData.description.trim()
+    ) {
+      Alert.alert(
+        "Description Required",
+        "Please provide a description for the 'Others' response."
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      // Get the main image URL from the existing response (if any)
+      let imageUrl = null;
+      const customerId = person.customerInfo.customer_id;
+
+      // Try to get existing image URL for this customer
+      const existingResponse = existingResponses[ptNo];
+      if (existingResponse && existingResponse.image_url) {
+        imageUrl = existingResponse.image_url;
+      } else {
+        // If no existing image, try to get from any response for this customer
+        const anyResponse = Object.values(existingResponses).find(
+          (resp) => resp.image_url
+        );
+        if (anyResponse) {
+          imageUrl = anyResponse.image_url;
+        }
+      }
+
+      // Prepare response data for individual PT - matching the base endpoint structure
+      const saveData = {
+        customer_id: customerId,
+        pt_no: ptNo,
+        response_type: responseData.response,
+        response_description: responseData.description || responseData.response,
+        image_url: imageUrl, // Use existing image or null
+        latitude: null, // Individual responses don't capture new location
+        longitude: null,
+      };
+
+      console.log("Saving individual response for PT:", ptNo, saveData);
+
+      const response = await fetch(`${BASE_URL}/api/save-individual-response`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(saveData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Server response error:", errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log("Individual response saved successfully:", result);
+
+        // Update existing responses state
+        setExistingResponses((prev) => ({
+          ...prev,
+          [ptNo]: {
+            response_text: responseData.response,
+            response_description:
+              responseData.description || responseData.response,
+            image_url: imageUrl,
+            pt_no: ptNo,
+          },
+        }));
+
+        Alert.alert(
+          "Success",
+          `Response ${result.updated ? "updated" : "saved"} successfully for PT number: ${ptNo}!`,
+          [{ text: "OK" }]
+        );
+      } else {
+        throw new Error(result.message || "Failed to save response");
+      }
+    } catch (error) {
+      console.error("Error in individual save process:", error);
+      Alert.alert("Error", "Failed to save response. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const renderItem = ({ item, index }) => {
+    const ptNo = getDisplayValue(item, "pt_no");
+    const currentResponse = individualResponses[ptNo] || {
+      response: "",
+      description: "",
+    };
+    const existingResponse = existingResponses[ptNo];
+
     return (
       <ScrollView
         style={[tw`p-4`, { width: width - 32 }]}
@@ -216,11 +406,123 @@ const CustRelated = ({ person, onClose }) => {
         {/* PT Number Header */}
         <View style={[tw`mb-4 p-4 rounded-lg`, { backgroundColor: "#7cc0d8" }]}>
           <Text style={tw`text-center text-lg font-bold text-white`}>
-            PT Number: {getDisplayValue(item, "pt_no")}
+            PT Number: {ptNo}
           </Text>
           <Text style={tw`text-center text-sm text-white opacity-90 mt-1`}>
             Record {index + 1} of {customerRecords.length}
           </Text>
+        </View>
+
+        {/* Individual Text Response Section */}
+        <View
+          style={[tw`border-2 rounded-lg p-4 mb-4`, { borderColor: "#7cc0d8" }]}
+        >
+          <Text
+            style={[
+              tw`text-lg font-semibold mb-3 text-center`,
+              { color: "#7cc0d8" },
+            ]}
+          >
+            Individual Text Response
+          </Text>
+
+          {existingResponse && existingResponse.image_url && (
+            <View
+              style={tw`bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3`}
+            >
+              <Text style={tw`text-blue-800 text-sm text-center`}>
+                📸 Image already captured for this visit
+              </Text>
+            </View>
+          )}
+
+          <View style={tw`mb-3`}>
+            <View style={tw`border border-gray-300 rounded-lg bg-white`}>
+              <RNPickerSelect
+                onValueChange={(value) =>
+                  handleIndividualResponseChange(ptNo, "response", value)
+                }
+                value={currentResponse.response}
+                placeholder={{ label: "Select response...", value: "" }}
+                items={[
+                  { label: "Call not lifting", value: "Call not lifting" },
+                  {
+                    label: "Customer not at home",
+                    value: "Customer not at home",
+                  },
+                  { label: "Requested time", value: "Requested time" },
+                  { label: "Others", value: "Others" },
+                ]}
+                style={{
+                  inputAndroid: {
+                    ...tw`text-sm text-gray-800 pl-3 pr-3 py-3`,
+                  },
+                  inputIOS: {
+                    ...tw`text-sm text-gray-800 pl-3 pr-3 py-3`,
+                  },
+                  placeholder: {
+                    color: "gray",
+                  },
+                }}
+              />
+            </View>
+          </View>
+
+          {/* Response Description */}
+          <TextInput
+            value={currentResponse.description}
+            onChangeText={(value) =>
+              handleIndividualResponseChange(ptNo, "description", value)
+            }
+            placeholder="Enter response description..."
+            multiline
+            numberOfLines={3}
+            style={tw`border border-gray-300 rounded-lg p-3 text-sm text-gray-800 bg-white`}
+          />
+
+          {/* Existing Response Info */}
+          {existingResponse && (
+            <View
+              style={tw`mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200`}
+            >
+              <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>
+                Current Saved Response:
+              </Text>
+              <Text style={tw`text-sm text-gray-600`}>
+                {existingResponse.response_text}
+              </Text>
+              {existingResponse.response_description && (
+                <Text style={tw`text-sm text-gray-500 mt-1`}>
+                  {existingResponse.response_description}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Save Individual Response Button */}
+          <TouchableOpacity
+            onPress={() => saveIndividualResponse(ptNo)}
+            disabled={saving || !currentResponse.response}
+            style={[
+              tw`rounded-full px-6 py-3 mt-4`,
+              {
+                backgroundColor: currentResponse.response
+                  ? "#10b981"
+                  : "#9ca3af",
+                opacity: currentResponse.response ? 1 : 0.6,
+              },
+            ]}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={tw`text-white text-lg font-bold text-center`}>
+                {existingResponse
+                  ? "Update Text Response"
+                  : "Save Text Response"}
+              </Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Loan Details Section */}
@@ -342,6 +644,9 @@ const CustRelated = ({ person, onClose }) => {
         </Text>
         <Text style={tw`text-center text-sm text-gray-600 mt-1`}>
           {customerRecords.length} Loan Account(s)
+        </Text>
+        <Text style={tw`text-center text-xs text-blue-600 mt-1`}>
+          You can update text responses for individual PT numbers
         </Text>
       </View>
 

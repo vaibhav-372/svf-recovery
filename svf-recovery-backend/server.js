@@ -1034,15 +1034,23 @@ app.get(
   }
 );
 // GET /api/check-customer-status/:customerId - Check if customer is visited
-app.get("/api/check-customer-status/:customerId", authenticateToken, (req, res) => {
-  try {
-    const { customerId } = req.params;
-    const agentId = req.user.userId;
+app.get(
+  "/api/check-customer-status/:customerId",
+  authenticateToken,
+  (req, res) => {
+    try {
+      const { customerId } = req.params;
+      const agentId = req.user.userId;
 
-    console.log("Checking customer status for:", customerId, "by agent:", agentId);
+      console.log(
+        "Checking customer status for:",
+        customerId,
+        "by agent:",
+        agentId
+      );
 
-    // First check if customer has any PT numbers that are visited
-    const checkVisitedQuery = `
+      // First check if customer has any PT numbers that are visited
+      const checkVisitedQuery = `
       SELECT isVisited 
       FROM tbl_assigned_agents 
       WHERE assigned_agent_id = ? 
@@ -1053,91 +1061,503 @@ app.get("/api/check-customer-status/:customerId", authenticateToken, (req, res) 
       LIMIT 1
     `;
 
-    db.query(checkVisitedQuery, [agentId, customerId], (err, visitedResults) => {
-      if (err) {
-        console.error("Database error checking visited status:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Error checking customer status",
-        });
-      }
+      db.query(
+        checkVisitedQuery,
+        [agentId, customerId],
+        (err, visitedResults) => {
+          if (err) {
+            console.error("Database error checking visited status:", err);
+            return res.status(500).json({
+              success: false,
+              message: "Error checking customer status",
+            });
+          }
 
-      const isVisited = visitedResults.length > 0 && visitedResults[0].isVisited === 1;
+          const isVisited =
+            visitedResults.length > 0 && visitedResults[0].isVisited === 1;
 
-      if (isVisited) {
-        // If visited, get the existing response with image URL
-        const getResponseQuery = `
+          if (isVisited) {
+            // If visited, get the existing response with image URL
+            const getResponseQuery = `
           SELECT * FROM tbl_recovery_responses 
           WHERE customer_id = ? AND agent_id = ?
           ORDER BY response_timestamp DESC 
           LIMIT 1
         `;
 
-        db.query(getResponseQuery, [customerId, agentId], (err, responseResults) => {
-          if (err) {
-            console.error("Database error fetching existing response:", err);
-            return res.status(500).json({
-              success: false,
-              message: "Error fetching existing response",
+            db.query(
+              getResponseQuery,
+              [customerId, agentId],
+              (err, responseResults) => {
+                if (err) {
+                  console.error(
+                    "Database error fetching existing response:",
+                    err
+                  );
+                  return res.status(500).json({
+                    success: false,
+                    message: "Error fetching existing response",
+                  });
+                }
+
+                let existingResponse = null;
+                if (responseResults.length > 0) {
+                  const response = responseResults[0];
+
+                  // Handle location coordinates
+                  let latitude = null;
+                  let longitude = null;
+                  if (response.location_coordinates) {
+                    try {
+                      if (typeof response.location_coordinates === "string") {
+                        const locationData = JSON.parse(
+                          response.location_coordinates
+                        );
+                        latitude = locationData.latitude;
+                        longitude = locationData.longitude;
+                      } else if (
+                        typeof response.location_coordinates === "object"
+                      ) {
+                        latitude = response.location_coordinates.latitude;
+                        longitude = response.location_coordinates.longitude;
+                      }
+                    } catch (parseError) {
+                      console.error(
+                        "Error parsing location coordinates:",
+                        parseError
+                      );
+                    }
+                  }
+
+                  existingResponse = {
+                    response_type: response.response_text,
+                    response_description: response.response_description,
+                    image_url: response.image_url, // IMPORTANT: Ensure image_url is included
+                    latitude: latitude,
+                    longitude: longitude,
+                    response_timestamp: response.response_timestamp,
+                    pt_no: response.pt_no,
+                  };
+                }
+
+                res.json({
+                  success: true,
+                  isVisited: true,
+                  existingResponse: existingResponse,
+                });
+              }
+            );
+          } else {
+            // Not visited
+            res.json({
+              success: true,
+              isVisited: false,
+              existingResponse: null,
             });
           }
+        }
+      );
+    } catch (error) {
+      console.error("Error checking customer status:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error checking customer status",
+      });
+    }
+  }
+);
 
-          let existingResponse = null;
-          if (responseResults.length > 0) {
-            const response = responseResults[0];
-            
-            // Handle location coordinates
-            let latitude = null;
-            let longitude = null;
-            if (response.location_coordinates) {
-              try {
-                if (typeof response.location_coordinates === 'string') {
-                  const locationData = JSON.parse(response.location_coordinates);
-                  latitude = locationData.latitude;
-                  longitude = locationData.longitude;
-                } else if (typeof response.location_coordinates === 'object') {
-                  latitude = response.location_coordinates.latitude;
-                  longitude = response.location_coordinates.longitude;
-                }
-              } catch (parseError) {
-                console.error("Error parsing location coordinates:", parseError);
-              }
-            }
+// GET /api/get-existing-responses/:customerId - Get existing responses for all PT numbers
+app.get(
+  "/api/get-existing-responses/:customerId",
+  authenticateToken,
+  (req, res) => {
+    try {
+      const { customerId } = req.params;
+      const agentId = req.user.userId;
 
-            existingResponse = {
-              response_type: response.response_text,
-              response_description: response.response_description,
-              image_url: response.image_url, // IMPORTANT: Ensure image_url is included
-              latitude: latitude,
-              longitude: longitude,
-              response_timestamp: response.response_timestamp,
-              pt_no: response.pt_no,
-            };
-          }
+      console.log("Getting existing responses for customer:", customerId);
 
-          res.json({
-            success: true,
-            isVisited: true,
-            existingResponse: existingResponse,
+      const getResponsesQuery = `
+      SELECT pt_no, response_text, response_description, image_url, response_timestamp
+      FROM tbl_recovery_responses 
+      WHERE customer_id = ? AND agent_id = ?
+      ORDER BY response_timestamp DESC
+    `;
+
+      db.query(getResponsesQuery, [customerId, agentId], (err, results) => {
+        if (err) {
+          console.error("Database error fetching existing responses:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Error fetching existing responses",
           });
+        }
+
+        const existingResponses = {};
+        results.forEach((row) => {
+          existingResponses[row.pt_no] = {
+            response_text: row.response_text,
+            response_description: row.response_description,
+            image_url: row.image_url,
+            response_timestamp: row.response_timestamp,
+          };
         });
-      } else {
-        // Not visited
+
         res.json({
           success: true,
-          isVisited: false,
-          existingResponse: null,
+          existingResponses: existingResponses,
+          total: results.length,
+        });
+      });
+    } catch (error) {
+      console.error("Error getting existing responses:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error getting existing responses",
+      });
+    }
+  }
+);
+
+// POST /api/save-individual-response - Save/update individual response for specific PT number
+app.post(
+  "/api/save-individual-response",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const agentId = req.user.userId;
+      const {
+        customer_id,
+        pt_no,
+        response_type,
+        response_description,
+        image_url,
+        latitude,
+        longitude,
+      } = req.body;
+
+      console.log("Saving individual response for agent:", agentId);
+      console.log("Individual PT number:", pt_no);
+      console.log("Received customer_id:", customer_id);
+
+      // Validate required fields - STRICTER VALIDATION
+      if (!customer_id) {
+        return res.status(400).json({
+          success: false,
+          message: "Customer ID is required",
         });
       }
-    });
-  } catch (error) {
-    console.error("Error checking customer status:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error checking customer status",
-    });
+
+      if (!pt_no) {
+        return res.status(400).json({
+          success: false,
+          message: "PT number is required",
+        });
+      }
+
+      if (!response_type) {
+        return res.status(400).json({
+          success: false,
+          message: "Response type is required",
+        });
+      }
+
+      if (!response_description) {
+        return res.status(400).json({
+          success: false,
+          message: "Response description is required",
+        });
+      }
+
+      // For individual responses, image is optional (can use existing image)
+      // if (!image_url) {
+      //   return res.status(400).json({
+      //     success: false,
+      //     message: "Image is required",
+      //   });
+      // }
+
+      // Generate location coordinates if available
+      let location_coordinates = null;
+      if (latitude && longitude) {
+        location_coordinates = JSON.stringify({
+          latitude: parseFloat(latitude),
+          longitude: parseFloat(longitude),
+        });
+      }
+
+      // Get branch_id from agent profile
+      const getAgentQuery =
+        "SELECT branch_id FROM tbl_emp_profile WHERE entry_id = ?";
+
+      db.query(getAgentQuery, [agentId], (err, agentResults) => {
+        if (err) {
+          console.error("Error fetching agent details:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Error fetching agent information",
+          });
+        }
+
+        if (agentResults.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Agent not found",
+          });
+        }
+
+        const branch_id = agentResults[0].branch_id;
+        const device_id = req.headers["user-agent"] || "mobile-app";
+
+        // Check if this PT number belongs to the customer and agent
+        const validatePTQuery = `
+        SELECT tac.pt_no 
+        FROM tbl_auction_customers tac
+        INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
+        WHERE tac.customer_id = ? 
+          AND tac.pt_no = ?
+          AND taa.assigned_agent_id = ?
+          AND taa.is_closed = 0
+        LIMIT 1
+      `;
+
+        db.query(
+          validatePTQuery,
+          [customer_id, pt_no, agentId],
+          (validateErr, validateResults) => {
+            if (validateErr) {
+              console.error("Error validating PT number:", validateErr);
+              return res.status(500).json({
+                success: false,
+                message: "Error validating PT number",
+              });
+            }
+
+            if (validateResults.length === 0) {
+              return res.status(404).json({
+                success: false,
+                message: "PT number not found or not assigned to this agent",
+              });
+            }
+
+            // Check if response already exists for this PT number
+            const checkExistingQuery = `
+          SELECT entry_id, image_url 
+          FROM tbl_recovery_responses 
+          WHERE pt_no = ? AND agent_id = ? AND customer_id = ?
+          LIMIT 1
+        `;
+
+            db.query(
+              checkExistingQuery,
+              [pt_no, agentId, customer_id],
+              (checkErr, checkResults) => {
+                if (checkErr) {
+                  console.error("Error checking existing response:", checkErr);
+                  return res.status(500).json({
+                    success: false,
+                    message: "Error checking existing response",
+                  });
+                }
+
+                let finalImageUrl = image_url;
+
+                if (checkResults.length > 0) {
+                  // UPDATE existing response - preserve existing image if new image not provided
+                  const existingResponse = checkResults[0];
+                  if (!finalImageUrl && existingResponse.image_url) {
+                    finalImageUrl = existingResponse.image_url; // Preserve existing image
+                  }
+
+                  const updateQuery = `
+              UPDATE tbl_recovery_responses 
+              SET response_text = ?, response_description = ?, 
+                  response_timestamp = ?, image_url = ?, location_coordinates = ?,
+                  completed_date = ?, device_id = ?
+              WHERE entry_id = ?
+            `;
+
+                  const values = [
+                    response_type,
+                    response_description,
+                    new Date(),
+                    finalImageUrl,
+                    location_coordinates,
+                    new Date(),
+                    device_id,
+                    existingResponse.entry_id,
+                  ];
+
+                  console.log("Updating existing individual response:", values);
+
+                  db.query(updateQuery, values, (updateErr, updateResults) => {
+                    if (updateErr) {
+                      console.error(
+                        "Database error updating individual response:",
+                        updateErr
+                      );
+                      return res.status(500).json({
+                        success: false,
+                        message:
+                          "Failed to update individual response: " +
+                          updateErr.message,
+                      });
+                    }
+
+                    console.log(
+                      "Individual response updated successfully for PT:",
+                      pt_no
+                    );
+
+                    // Update isVisited to 1 for this specific PT number
+                    updateIndividualIsVisited(agentId, [pt_no], (updateErr) => {
+                      if (updateErr) {
+                        console.error(
+                          "Error updating isVisited status:",
+                          updateErr
+                        );
+                      }
+
+                      res.json({
+                        success: true,
+                        message: `Individual response updated successfully for PT number: ${pt_no}`,
+                        pt_count: 1,
+                        pt_numbers: [pt_no],
+                        customer_id: customer_id,
+                        updated: true,
+                      });
+                    });
+                  });
+                } else {
+                  // INSERT new individual response
+                  const insertQuery = `
+              INSERT INTO tbl_recovery_responses 
+              (pt_no, customer_id, agent_id, response_text, response_description, 
+               response_timestamp, image_url, location_coordinates, completed_date, 
+               device_id, branch_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+
+                  const values = [
+                    pt_no,
+                    customer_id,
+                    agentId,
+                    response_type,
+                    response_description,
+                    new Date(),
+                    finalImageUrl,
+                    location_coordinates,
+                    new Date(),
+                    device_id,
+                    branch_id,
+                  ];
+
+                  console.log("Inserting new individual response:", values);
+
+                  db.query(insertQuery, values, (insertErr, insertResults) => {
+                    if (insertErr) {
+                      console.error(
+                        "Database error saving individual response:",
+                        insertErr
+                      );
+                      return res.status(500).json({
+                        success: false,
+                        message:
+                          "Failed to save individual response: " +
+                          insertErr.message,
+                      });
+                    }
+
+                    console.log(
+                      "Individual response saved successfully for PT:",
+                      pt_no
+                    );
+
+                    // Update isVisited to 1 for this specific PT number
+                    updateIndividualIsVisited(agentId, [pt_no], (updateErr) => {
+                      if (updateErr) {
+                        console.error(
+                          "Error updating isVisited status:",
+                          updateErr
+                        );
+                      }
+
+                      res.json({
+                        success: true,
+                        message: `Individual response saved successfully for PT number: ${pt_no}`,
+                        pt_count: 1,
+                        pt_numbers: [pt_no],
+                        customer_id: customer_id,
+                        response_id: insertResults.insertId,
+                      });
+                    });
+                  });
+                }
+              }
+            );
+          }
+        );
+      });
+    } catch (error) {
+      console.error("Server error saving individual response:", error);
+      res.status(500).json({
+        success: false,
+        message:
+          "Server error while saving individual response: " + error.message,
+      });
+    }
   }
-});
+);
+
+// Helper function to update isVisited status for individual PT(s)
+function updateIndividualIsVisited(agentId, ptNumbers, callback) {
+  if (!ptNumbers || ptNumbers.length === 0) {
+    return callback(null);
+  }
+
+  const placeholders = ptNumbers.map(() => "?").join(",");
+  const updateQuery = `
+    UPDATE tbl_assigned_agents 
+    SET isVisited = 1 
+    WHERE assigned_agent_id = ? 
+      AND pt_no IN (${placeholders})
+  `;
+
+  const values = [agentId, ...ptNumbers];
+
+  db.query(updateQuery, values, (err, results) => {
+    if (err) {
+      console.error("Error updating isVisited status:", err);
+      return callback(err);
+    }
+
+    console.log(
+      `isVisited updated to 1 for ${results.affectedRows} PT numbers`
+    );
+    callback(null);
+  });
+}
+
+// Helper function to update isVisited status for individual PT
+function updateIndividualIsVisited(agentId, ptNo, callback) {
+  const updateQuery = `
+    UPDATE tbl_assigned_agents 
+    SET isVisited = 1 
+    WHERE assigned_agent_id = ? 
+      AND pt_no = ?
+  `;
+
+  db.query(updateQuery, [agentId, ptNo], (err, results) => {
+    if (err) {
+      console.error("Error updating individual isVisited status:", err);
+      return callback(err);
+    }
+
+    console.log(`isVisited updated to 1 for individual PT: ${ptNo}`);
+    callback(null);
+  });
+}
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${PORT}`);

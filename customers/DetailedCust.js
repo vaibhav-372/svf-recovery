@@ -527,7 +527,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
         </View>
 
         {/* Progress Steps */}
-        <View style={tw`flex-row justify-between items-center mb-4`}>
+        {/* <View style={tw`flex-row justify-between items-center mb-4`}>
           <View style={tw`flex-row items-center`}>
             <View
               style={[
@@ -575,9 +575,17 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
               Capture Image
             </Text>
           </View>
-        </View>
+        </View> */}
 
         <ScrollView style={tw`px-2`} showsVerticalScrollIndicator={false}>
+          <Text
+            style={[
+              tw`text-2xl font-extrabold mb-3 text-center`,
+              { color: "#7cc0d8" },
+            ]}
+          >
+            {person.name}
+          </Text>
           {/* Personal Information - Always Show */}
           <View
             style={[
@@ -595,7 +603,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </Text>
 
             <InfoRow label="Customer ID" value={person.customer_id} />
-            <InfoRow label="Name" value={person.customer_name || person.name} />
+            {/* <InfoRow label="Name" value={person.customer_name || person.name} /> */}
             <InfoRow label="City" value={person.city || person.address} />
             <InfoRow label="Address" value={person.address} />
             <InfoRow
