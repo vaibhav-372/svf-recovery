@@ -40,6 +40,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
   const [existingResponse, setExistingResponse] = useState(null);
   const [isAlreadyVisited, setIsAlreadyVisited] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1); // 1: Check Status, 2: Capture Image, 3: Save Response
 
   const { token } = useAuth();
   const SERVER_IP = "192.168.65.11";
@@ -47,9 +48,13 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
 
   useEffect(() => {
     if (person) {
-      console.log("DetailedCust opened for person:", person.customer_id, person.customer_name);
+      console.log(
+        "DetailedCust opened for person:",
+        person.customer_id,
+        person.customer_name
+      );
       resetForm();
-      checkExistingResponse();
+      checkCustomerStatus();
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -74,22 +79,25 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     setExistingResponse(null);
     setIsAlreadyVisited(false);
     setCheckingExisting(false);
+    setCurrentStep(1);
   };
 
-  const checkExistingResponse = async () => {
+  // STEP 1: Check if customer is already visited
+  const checkCustomerStatus = async () => {
     try {
       const customerId = person.customer_id || person.entry_id;
 
       if (!customerId) {
         console.log("No customer ID found");
+        Alert.alert("Error", "Customer ID not found");
         return;
       }
 
       setCheckingExisting(true);
-      console.log("Checking existing response for customer:", customerId);
+      console.log("STEP 1: Checking customer status for:", customerId);
 
       const response = await fetch(
-        `${BASE_URL}/api/check-existing-response/${customerId}`,
+        `${BASE_URL}/api/check-customer-status/${customerId}`,
         {
           method: "GET",
           headers: {
@@ -101,116 +109,80 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
 
       if (response.ok) {
         const result = await response.json();
-        console.log("Check existing response result:", result);
+        console.log("Customer status check result:", result);
 
-        if (result.success && result.existingResponse) {
-          setExistingResponse(result.existingResponse);
-          setIsAlreadyVisited(true);
+        if (result.success) {
+          if (result.isVisited) {
+            // Customer already visited - show existing data
+            setIsAlreadyVisited(true);
+            setExistingResponse(result.existingResponse);
 
-          // Pre-fill the form with existing data
-          setSelectedResponse(result.existingResponse.response_type || result.existingResponse.response_text);
-          setResponseDescription(result.existingResponse.response_description);
+            // Pre-fill the form with existing data
+            if (result.existingResponse) {
+              setSelectedResponse(
+                result.existingResponse.response_type ||
+                  result.existingResponse.response_text
+              );
+              setResponseDescription(
+                result.existingResponse.response_description
+              );
 
-          // Set captured image data if available
-          if (result.existingResponse.image_url) {
-            const fullImageUrl = result.existingResponse.image_url.startsWith('http') 
-              ? result.existingResponse.image_url 
-              : `${BASE_URL}${result.existingResponse.image_url}`;
-              
-            setCapturedImage({
-              imageUri: fullImageUrl,
-              location: (result.existingResponse.latitude && result.existingResponse.longitude)
-                ? {
-                    latitude: result.existingResponse.latitude,
-                    longitude: result.existingResponse.longitude,
-                  }
-                : null,
-            });
-            setUploadedImageUrl(result.existingResponse.image_url);
+              // Set captured image data if available - IMPORTANT: Set image for visited customers
+              if (result.existingResponse.image_url) {
+                const fullImageUrl =
+                  result.existingResponse.image_url.startsWith("http")
+                    ? result.existingResponse.image_url
+                    : `${BASE_URL}${result.existingResponse.image_url}`;
+
+                setCapturedImage({
+                  imageUri: fullImageUrl,
+                  location:
+                    result.existingResponse.latitude &&
+                    result.existingResponse.longitude
+                      ? {
+                          latitude: result.existingResponse.latitude,
+                          longitude: result.existingResponse.longitude,
+                        }
+                      : null,
+                });
+                setUploadedImageUrl(result.existingResponse.image_url);
+              }
+            }
+            setCurrentStep(1); // Stay on step 1 (view only)
+          } else {
+            // Customer not visited - proceed to step 2
+            setIsAlreadyVisited(false);
+            setCurrentStep(2); // Move to response selection
           }
-
-          console.log("Existing response found and set:", result.existingResponse);
         } else {
-          console.log("No existing response found, setting isAlreadyVisited to false");
-          setIsAlreadyVisited(false);
+          Alert.alert("Error", "Failed to check customer status");
         }
       } else {
         console.log("Response not OK, status:", response.status);
-        setIsAlreadyVisited(false);
+        Alert.alert("Error", "Failed to check customer status");
       }
     } catch (error) {
-      console.error("Error checking existing response:", error);
-      setIsAlreadyVisited(false);
+      console.error("Error checking customer status:", error);
+      Alert.alert("Error", "Failed to check customer status");
     } finally {
       setCheckingExisting(false);
     }
-  };
-
-  // Upload image to server
-  const uploadImageToServer = async (imageUri) => {
-    try {
-      console.log("Uploading image:", imageUri);
-
-      const formData = new FormData();
-      formData.append("image", {
-        uri: imageUri,
-        type: "image/jpeg",
-        name: `recovery_${person.customer_id}_${Date.now()}.jpg`,
-      });
-      formData.append("customer_id", person.customer_id);
-
-      const response = await fetch(`${BASE_URL}/api/upload-image`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed with status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        console.log("Image uploaded successfully:", result.image_url);
-        return result.image_url;
-      } else {
-        throw new Error(result.message || "Upload failed");
-      }
-    } catch (error) {
-      console.error("Error uploading image:", error);
-      throw error;
-    }
-  };
-
-  const handleCapture = (data) => {
-    if (isAlreadyVisited) {
-      Alert.alert(
-        "Already Visited",
-        "This customer has already been visited. Cannot capture new image."
-      );
-      return;
-    }
-
-    console.log("Captured Data: ", data);
-    setCapturedImage(data);
-    setCameraVisible(false);
   };
 
   const fetchAllCustomerPTs = async (customerId) => {
     try {
       setLoadingRelated(true);
 
-      let response = await fetch(`${BASE_URL}/api/customers/${customerId}/loans`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      let response = await fetch(
+        `${BASE_URL}/api/customers/${customerId}/loans`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (response.status === 404) {
         console.log("Customer ID endpoint not found, trying by name...");
@@ -285,7 +257,73 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     }
   };
 
-  // Save response to database for all PT numbers
+  // STEP 2: Handle response selection
+  const handleResponseSelect = (value) => {
+    setSelectedResponse(value);
+    if (value !== "Others") {
+      setResponseDescription(value); // Auto-fill description with selected response
+    } else {
+      setResponseDescription(""); // Clear for Others
+    }
+  };
+
+  // STEP 3: Handle image capture
+  const handleCapture = (data) => {
+    if (isAlreadyVisited) {
+      Alert.alert(
+        "Already Visited",
+        "This customer has already been visited. Cannot capture new image."
+      );
+      return;
+    }
+
+    console.log("STEP 3: Image captured:", data);
+    setCapturedImage(data);
+    setCameraVisible(false);
+    setCurrentStep(3); // Move to save step
+  };
+
+  // Upload image to server
+  const uploadImageToServer = async (imageUri) => {
+    try {
+      console.log("Uploading image:", imageUri);
+
+      const formData = new FormData();
+      formData.append("image", {
+        uri: imageUri,
+        type: "image/jpeg",
+        name: `recovery_${person.customer_id}_${Date.now()}.jpg`,
+      });
+      formData.append("customer_id", person.customer_id);
+
+      const response = await fetch(`${BASE_URL}/api/upload-image`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed with status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log("Image uploaded successfully:", result.image_url);
+        return result.image_url;
+      } else {
+        throw new Error(result.message || "Upload failed");
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      throw error;
+    }
+  };
+
+  // Save response to database
   const saveResponseToDatabase = async () => {
     if (isAlreadyVisited) {
       Alert.alert(
@@ -295,188 +333,127 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
       return;
     }
 
+    // STRICT VALIDATION: Check if all required fields are present
+    if (!selectedResponse) {
+      Alert.alert(
+        "Response Required",
+        "Please select a customer response before saving."
+      );
+      return;
+    }
+
+    if (!capturedImage) {
+      Alert.alert("Image Required", "Please capture an image before saving.");
+      return;
+    }
+
+    if (selectedResponse === "Others" && !responseDescription.trim()) {
+      Alert.alert(
+        "Description Required",
+        "Please provide a description for the 'Others' response."
+      );
+      return;
+    }
+
     try {
       setSaving(true);
 
-      // First upload the image if we have one
+      // Upload the image first
       let imageUrl = null;
-      if (capturedImage?.imageUri) {
-        try {
-          imageUrl = await uploadImageToServer(capturedImage.imageUri);
-          setUploadedImageUrl(imageUrl);
-        } catch (uploadError) {
-          console.error("Failed to upload image:", uploadError);
-          Alert.alert(
-            "Image Upload Failed",
-            "The response will be saved without the image. Continue?",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Save Without Image",
-                onPress: () => saveResponseWithoutImage(),
-              },
-            ]
-          );
-          return;
-        }
+      try {
+        imageUrl = await uploadImageToServer(capturedImage.imageUri);
+        setUploadedImageUrl(imageUrl);
+      } catch (uploadError) {
+        console.error("Failed to upload image:", uploadError);
+        Alert.alert(
+          "Image Upload Failed",
+          "Cannot save response without image. Please try capturing the image again.",
+          [{ text: "OK" }]
+        );
+        setSaving(false);
+        return;
       }
 
-      await saveResponseWithImage(imageUrl);
+      // Prepare response data
+      const responseData = {
+        customer_id: person.customer_id || person.entry_id,
+        response_type: selectedResponse,
+        response_description: responseDescription || selectedResponse,
+        image_url: imageUrl,
+        latitude: capturedImage?.location?.latitude || null,
+        longitude: capturedImage?.location?.longitude || null,
+      };
+
+      console.log("Saving response with data:", responseData);
+
+      const response = await fetch(`${BASE_URL}/api/save-recovery-response`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(responseData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Server response error:", errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log("Response saved successfully:", result);
+
+        // Call the callback to notify parent component
+        if (onResponseSaved) {
+          onResponseSaved(person.customer_id || person.entry_id);
+        }
+
+        Alert.alert(
+          "Success",
+          `Response saved successfully for ${result.pt_count} loan account(s)!`,
+          [
+            {
+              text: "OK",
+              onPress: onClose,
+            },
+          ]
+        );
+      } else {
+        throw new Error(result.message || "Failed to save response");
+      }
     } catch (error) {
       console.error("Error in save process:", error);
       Alert.alert("Error", "Failed to save response. Please try again.");
+    } finally {
       setSaving(false);
     }
   };
 
-  const saveResponseWithImage = async (imageUrl) => {
-    const responseData = {
-      customer_id: person.customer_id || person.entry_id,
-      response_type: selectedResponse,
-      response_description: responseDescription || selectedResponse,
-      image_url: imageUrl, // Use the uploaded image URL
-      latitude: capturedImage?.location?.latitude || null,
-      longitude: capturedImage?.location?.longitude || null,
-    };
-
-    console.log("Saving response with image:", responseData);
-
-    const response = await fetch(`${BASE_URL}/api/save-recovery-response`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(responseData),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Server response error:", errorText);
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    if (result.success) {
-      console.log("Response saved successfully:", result);
-
-      // Call the callback to notify parent component
-      if (onResponseSaved) {
-        onResponseSaved(person.customer_id || person.entry_id);
-      } else {
-        // Fallback: close modal and show success
-        Alert.alert(
-          "Success",
-          `Response saved successfully for ${result.pt_count} loan account(s)!`
-        );
-        onClose();
-      }
-    } else {
-      throw new Error(result.message || "Failed to save response");
-    }
-  };
-
-  const saveResponseWithoutImage = async () => {
-    const responseData = {
-      customer_id: person.customer_id || person.entry_id,
-      response_type: selectedResponse,
-      response_description: responseDescription || selectedResponse,
-      image_url: null, // No image
-      latitude: capturedImage?.location?.latitude || null,
-      longitude: capturedImage?.location?.longitude || null,
-    };
-
-    console.log("Saving response without image:", responseData);
-
-    const response = await fetch(`${BASE_URL}/api/save-recovery-response`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(responseData),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Server response error:", errorText);
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    if (result.success) {
-      console.log("Response saved successfully:", result);
-
-      // Call the callback to notify parent component
-      if (onResponseSaved) {
-        onResponseSaved(person.customer_id || person.entry_id);
-      } else {
-        // Fallback: close modal and show success
-        Alert.alert(
-          "Success",
-          `Response saved successfully for ${result.pt_count} loan account(s)!`
-        );
-        onClose();
-      }
-    } else {
-      throw new Error(result.message || "Failed to save response");
-    }
-  };
-
-  // Validate and handle save
+  // Handle save button press
   const handleSave = () => {
     if (isAlreadyVisited) {
+      Alert.alert("Already Visited", "This customer has already been visited.");
+      return;
+    }
+
+    // Final validation before saving
+    if (!selectedResponse || !capturedImage) {
       Alert.alert(
-        "Already Visited",
-        "This customer has already been visited. Cannot update response."
+        "Incomplete Data",
+        "Please complete all required steps before saving."
       );
       return;
     }
 
-    // Check if response is selected
-    if (!selectedResponse) {
-      Alert.alert(
-        "Response Required",
-        "Please select a customer response before saving.",
-        [{ text: "OK" }]
-      );
-      return;
-    }
-
-    // Check if image is captured
-    if (!capturedImage) {
-      Alert.alert("Image Required", "Please capture an image before saving.", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Capture Now",
-          onPress: () => setCameraVisible(true),
-        },
-      ]);
-      return;
-    }
-
-    // Check if description is provided for "Others" response
-    if (selectedResponse === "Others" && !responseDescription.trim()) {
-      Alert.alert(
-        "Description Required",
-        "Please provide a description for the 'Others' response.",
-        [{ text: "OK" }]
-      );
-      return;
-    }
-
-    // All validations passed, save to database
     Alert.alert(
       "Confirm Save",
       "This response will be saved for all loan accounts of this customer. Continue?",
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Save",
-          onPress: saveResponseToDatabase,
-        },
+        { text: "Save", onPress: saveResponseToDatabase },
       ]
     );
   };
@@ -509,20 +486,9 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           { paddingTop: 40 },
         ]}
       >
-        {/* Debug Info - Remove in production */}
-        {__DEV__ && (
-          <View style={tw`bg-yellow-100 p-2 mb-2 rounded`}>
-            <Text style={tw`text-xs`}>
-              Debug: Customer: {person.customer_id} | 
-              Visited: {isAlreadyVisited ? 'Yes' : 'No'} | 
-              Checking: {checkingExisting ? 'Yes' : 'No'} |
-              Has Response: {existingResponse ? 'Yes' : 'No'}
-            </Text>
-          </View>
-        )}
-
         {/* Header with Icons */}
         <View style={tw`flex flex-row justify-between items-center mb-4`}>
+          {/* View All Loans Button */}
           <TouchableOpacity
             onPress={handleViewDetails}
             style={tw`flex-row items-center`}
@@ -543,6 +509,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </Text>
           </TouchableOpacity>
 
+          {/* Camera Button */}
           <TouchableOpacity
             onPress={() => (isAlreadyVisited ? null : setCameraVisible(true))}
             disabled={isAlreadyVisited || checkingExisting}
@@ -559,39 +526,59 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Customer Name with Visited Status */}
-        <View>
-          <Text
-            style={[
-              tw`text-center text-2xl font-bold mb-2`,
-              { color: "#7cc0d8" },
-            ]}
-          >
-            {person.customer_name || person.name}
-          </Text>
-          {isAlreadyVisited && (
-            <View style={tw`bg-green-100 rounded-full px-3 py-1 mx-4 mb-2`}>
-              <Text
-                style={tw`text-green-800 text-center text-sm font-semibold`}
-              >
-                ✓ Already Visited
-              </Text>
+        {/* Progress Steps */}
+        <View style={tw`flex-row justify-between items-center mb-4`}>
+          <View style={tw`flex-row items-center`}>
+            <View
+              style={[
+                tw`w-6 h-6 rounded-full items-center justify-center`,
+                currentStep >= 1 ? tw`bg-green-500` : tw`bg-gray-300`,
+              ]}
+            >
+              <Text style={tw`text-white text-xs font-bold`}>1</Text>
             </View>
-          )}
-          {checkingExisting && (
-            <View style={tw`bg-blue-100 rounded-full px-3 py-1 mx-4 mb-2`}>
-              <Text style={tw`text-blue-800 text-center text-sm font-semibold`}>
-                <ActivityIndicator size="small" color="#3b82f6" /> Checking...
-              </Text>
+            <Text
+              style={tw`text-xs ml-1 ${currentStep >= 1 ? "text-green-600" : "text-gray-500"}`}
+            >
+              Check Status
+            </Text>
+          </View>
+
+          <View style={tw`flex-row items-center`}>
+            <View
+              style={[
+                tw`w-6 h-6 rounded-full items-center justify-center`,
+                currentStep >= 2 ? tw`bg-green-500` : tw`bg-gray-300`,
+              ]}
+            >
+              <Text style={tw`text-white text-xs font-bold`}>2</Text>
             </View>
-          )}
-          <Text style={tw`text-center text-sm text-gray-600`}>
-            Response will be saved for all loan accounts
-          </Text>
+            <Text
+              style={tw`text-xs ml-1 ${currentStep >= 2 ? "text-green-600" : "text-gray-500"}`}
+            >
+              Add Response
+            </Text>
+          </View>
+
+          <View style={tw`flex-row items-center`}>
+            <View
+              style={[
+                tw`w-6 h-6 rounded-full items-center justify-center`,
+                currentStep >= 3 ? tw`bg-green-500` : tw`bg-gray-300`,
+              ]}
+            >
+              <Text style={tw`text-white text-xs font-bold`}>3</Text>
+            </View>
+            <Text
+              style={tw`text-xs ml-1 ${currentStep >= 3 ? "text-green-600" : "text-gray-500"}`}
+            >
+              Capture Image
+            </Text>
+          </View>
         </View>
 
         <ScrollView style={tw`px-2`} showsVerticalScrollIndicator={false}>
-          {/* Personal Information */}
+          {/* Personal Information - Always Show */}
           <View
             style={[
               tw`border-2 rounded-lg p-4 mb-4`,
@@ -608,6 +595,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </Text>
 
             <InfoRow label="Customer ID" value={person.customer_id} />
+            <InfoRow label="Name" value={person.customer_name || person.name} />
             <InfoRow label="City" value={person.city || person.address} />
             <InfoRow label="Address" value={person.address} />
             <InfoRow
@@ -621,7 +609,36 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             />
           </View>
 
-          {/* Customer Response */}
+          {/* Status Check Result */}
+          {checkingExisting && (
+            <View
+              style={tw`bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 items-center`}
+            >
+              <ActivityIndicator size="small" color="#3b82f6" />
+              <Text style={tw`text-blue-800 text-sm mt-2`}>
+                Checking customer status...
+              </Text>
+            </View>
+          )}
+
+          {isAlreadyVisited && !checkingExisting && (
+            <View
+              style={tw`bg-green-50 border border-green-200 rounded-lg p-4 mb-4`}
+            >
+              <View style={tw`flex-row items-center justify-center`}>
+                <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                <Text style={tw`text-green-800 text-sm font-semibold ml-2`}>
+                  ✓ Already Visited
+                </Text>
+              </View>
+              <Text style={tw`text-green-600 text-xs text-center mt-1`}>
+                This customer has already been visited. Viewing existing
+                response.
+              </Text>
+            </View>
+          )}
+
+          {/* Customer Response Section - Show for both visited and non-visited */}
           <View
             style={[
               tw`border-2 rounded-lg p-4 mb-4`,
@@ -650,15 +667,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 ]}
               >
                 <RNPickerSelect
-                  onValueChange={(value) => {
-                    if (isAlreadyVisited) return;
-                    setSelectedResponse(value);
-                    if (value !== "Others") {
-                      setResponseDescription(value); // Auto-fill description with selected response
-                    } else {
-                      setResponseDescription(""); // Clear for Others
-                    }
-                  }}
+                  onValueChange={handleResponseSelect}
                   value={selectedResponse}
                   placeholder={{ label: "Select response...", value: "" }}
                   items={[
@@ -705,8 +714,9 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             />
           </View>
 
-          {/* Captured Image */}
-          {capturedImage && (
+          {/* Captured Image Section - Show for both visited and non-visited */}
+          {(capturedImage ||
+            (isAlreadyVisited && existingResponse?.image_url)) && (
             <View style={tw`mb-4`}>
               <Text
                 style={[
@@ -718,6 +728,18 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                   ? "Previously Captured Image"
                   : "Captured Image"}
               </Text>
+
+              {__DEV__ && (
+                <View style={tw`bg-yellow-100 p-2 rounded mb-2`}>
+                  <Text style={tw`text-xs`}>
+                    Image URL: {capturedImage.imageUri}
+                  </Text>
+                  {console.log("Captured Image URI:", capturedImage.imageUri)}
+                  <Text style={tw`text-xs`}>Base URL: {BASE_URL}</Text>
+                  {console.log("Base URL:", BASE_URL)}
+                </View>
+              )}
+
               <TouchableOpacity onPress={() => setImageViewVisible(true)}>
                 <View
                   style={[
@@ -756,7 +778,37 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </View>
           )}
 
-          {/* Location */}
+          {/* Camera Section - Only show if NOT visited and response is selected */}
+          {!isAlreadyVisited && selectedResponse && !capturedImage && (
+            <View style={tw`mb-4`}>
+              <Text
+                style={[
+                  tw`text-center text-lg font-semibold mb-2`,
+                  { color: "#7cc0d8" },
+                ]}
+              >
+                Capture Image
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => setCameraVisible(true)}
+                style={[
+                  tw`border-2 border-dashed rounded-lg p-6 items-center`,
+                  { borderColor: "#7cc0d8" },
+                ]}
+              >
+                <Entypo name="camera" size={32} color="#7cc0d8" />
+                <Text style={tw`text-center text-blue-600 text-sm mt-2`}>
+                  Tap to Capture Image
+                </Text>
+                <Text style={tw`text-center text-gray-500 text-xs mt-1`}>
+                  Required for submission
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Location - Show for both visited and non-visited */}
           {capturedImage?.location && (
             <View style={tw`mb-4`}>
               <Text
@@ -780,7 +832,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           <View style={tw`mb-32`} />
         </ScrollView>
 
-        {/* Bottom Buttons - Side by Side */}
+        {/* Bottom Buttons */}
         <View
           style={tw`absolute bottom-5 left-4 right-4 flex-row justify-between`}
         >
@@ -797,33 +849,31 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </Text>
           </Pressable>
 
-          {/* Save Button */}
-          <Pressable
-            onPress={handleSave}
-            disabled={!isSaveEnabled || saving || isAlreadyVisited || checkingExisting}
-            style={[
-              tw`rounded-full px-8 py-3 flex-1 ml-2`,
-              {
-                backgroundColor: isAlreadyVisited || checkingExisting
-                  ? "#9ca3af"
-                  : isSaveEnabled
-                    ? "#10b981"
-                    : "#9ca3af",
-                opacity: isAlreadyVisited || checkingExisting ? 0.6 : isSaveEnabled ? 1 : 0.6,
-              },
-            ]}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text style={tw`text-white text-lg font-bold text-center`}>
-                {isAlreadyVisited ? "Already Saved" : checkingExisting ? "Checking..." : "Save"}
-              </Text>
-            )}
-          </Pressable>
+          {/* Save Button - Only show if not visited and all steps completed */}
+          {!isAlreadyVisited && (
+            <Pressable
+              onPress={handleSave}
+              disabled={!isSaveEnabled || saving}
+              style={[
+                tw`rounded-full px-8 py-3 flex-1 ml-2`,
+                {
+                  backgroundColor: isSaveEnabled ? "#10b981" : "#9ca3af",
+                  opacity: isSaveEnabled ? 1 : 0.6,
+                },
+              ]}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={tw`text-white text-lg font-bold text-center`}>
+                  {isSaveEnabled ? "Save Response" : "Complete Steps"}
+                </Text>
+              )}
+            </Pressable>
+          )}
         </View>
 
-        {/* CustRelated Modal */}
+        {/* Modals */}
         <Modal
           animationType="slide"
           transparent={true}
@@ -843,6 +893,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           />
         </Modal>
 
+        {/* Image Viewing Modal - Updated to handle both visited and non-visited images */}
         <ImageViewing
           images={[{ uri: capturedImage?.imageUri }]}
           imageIndex={0}

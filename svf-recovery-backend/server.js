@@ -546,7 +546,166 @@ app.get(
   }
 );
 
-// Save recovery response endpoint (PROTECTED ROUTE)
+// // Save recovery response endpoint (PROTECTED ROUTE)
+// app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
+//   try {
+//     const agentId = req.user.userId;
+//     const {
+//       customer_id,
+//       response_type,
+//       response_description,
+//       image_url,
+//       latitude,
+//       longitude,
+//     } = req.body;
+
+//     console.log("Received recovery response data:", req.body);
+
+//     console.log("Saving recovery response for agent:", agentId);
+
+//     // Validate required fields
+//     if (!customer_id || !response_type || !response_description) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "Missing required fields: customer_id, response_type, response_description",
+//       });
+//     }
+
+//     // Generate location coordinates if available
+//     let location_coordinates = null;
+//     if (latitude && longitude) {
+//       location_coordinates = JSON.stringify({
+//         latitude: parseFloat(latitude),
+//         longitude: parseFloat(longitude),
+//       });
+//     }
+
+//     // Get branch_id from agent profile
+//     const getAgentQuery =
+//       "SELECT branch_id FROM tbl_emp_profile WHERE entry_id = ?";
+
+//     db.query(getAgentQuery, [agentId], (err, agentResults) => {
+//       if (err) {
+//         console.error("Error fetching agent details:", err);
+//         return res.status(500).json({
+//           success: false,
+//           message: "Error fetching agent information",
+//         });
+//       }
+
+//       if (agentResults.length === 0) {
+//         return res.status(404).json({
+//           success: false,
+//           message: "Agent not found",
+//         });
+//       }
+
+//       const branch_id = agentResults[0].branch_id;
+//       const device_id = req.headers["user-agent"] || "mobile-app";
+
+//       // Get all PT numbers for this customer assigned to this agent
+//       const getCustomerPTsQuery = `
+//         SELECT DISTINCT tac.pt_no
+//         FROM tbl_auction_customers tac
+//         INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
+//         WHERE tac.customer_id = ?
+//           AND taa.assigned_agent_id = ?
+//           AND taa.is_closed = 0
+//       `;
+
+//       db.query(
+//         getCustomerPTsQuery,
+//         [customer_id, agentId],
+//         (err, ptResults) => {
+//           if (err) {
+//             console.error("Error fetching customer PTs:", err);
+//             return res.status(500).json({
+//               success: false,
+//               message: "Error fetching customer loan accounts",
+//             });
+//           }
+
+//           if (ptResults.length === 0) {
+//             return res.status(404).json({
+//               success: false,
+//               message: "No active loan accounts found for this customer",
+//             });
+//           }
+
+//           const ptNumbers = ptResults.map((row) => row.pt_no);
+//           console.log(
+//             `Saving response for ${ptNumbers.length} PT numbers:`,
+//             ptNumbers
+//           );
+
+//           // Prepare insert query for bulk insert
+//           const insertQuery = `
+//           INSERT INTO tbl_recovery_responses
+//           (pt_no, customer_id, agent_id, response_text, response_description,
+//            response_timestamp, image_url, location_coordinates, completed_date,
+//            device_id, branch_id)
+//           VALUES ?
+//         `;
+
+//           // Prepare values for bulk insert
+//           const values = ptNumbers.map((pt_no) => [
+//             pt_no,
+//             customer_id,
+//             agentId,
+//             response_type,
+//             response_description,
+//             new Date(),
+//             image_url,
+//             location_coordinates,
+//             new Date(),
+//             device_id,
+//             branch_id,
+//           ]);
+
+//           console.log(`Executing bulk insert with ${values.length} records`);
+
+//           db.query(insertQuery, [values], (err, results) => {
+//             if (err) {
+//               console.error("Database error saving recovery responses:", err);
+//               return res.status(500).json({
+//                 success: false,
+//                 message: "Failed to save recovery responses: " + err.message,
+//               });
+//             }
+
+//             console.log(
+//               `Recovery responses saved successfully for ${ptNumbers.length} PT numbers. Affected rows:`,
+//               results.affectedRows
+//             );
+
+//             // Update isVisited to 1 for all PT numbers in tbl_assigned_agents
+//             updateIsVisited(agentId, ptNumbers, (updateErr) => {
+//               if (updateErr) {
+//                 console.error("Error updating isVisited status:", updateErr);
+//               }
+
+//               res.json({
+//                 success: true,
+//                 message: `Recovery response saved successfully for ${ptNumbers.length} loan account(s)`,
+//                 pt_count: ptNumbers.length,
+//                 pt_numbers: ptNumbers,
+//               });
+//             });
+//           });
+//         }
+//       );
+//     });
+//   } catch (error) {
+//     console.error("Server error saving recovery response:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Server error while saving response: " + error.message,
+//     });
+//   }
+// });
+
+// server.js - Updated save-recovery-response endpoint
 app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
   try {
     const agentId = req.user.userId;
@@ -560,13 +719,34 @@ app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
     } = req.body;
 
     console.log("Saving recovery response for agent:", agentId);
+    console.log("Received customer_id:", customer_id);
 
-    // Validate required fields
-    if (!customer_id || !response_type || !response_description) {
+    // Validate required fields - STRICTER VALIDATION
+    if (!customer_id) {
       return res.status(400).json({
         success: false,
-        message:
-          "Missing required fields: customer_id, response_type, response_description",
+        message: "Customer ID is required",
+      });
+    }
+
+    if (!response_type) {
+      return res.status(400).json({
+        success: false,
+        message: "Response type is required",
+      });
+    }
+
+    if (!response_description) {
+      return res.status(400).json({
+        success: false,
+        message: "Response description is required",
+      });
+    }
+
+    if (!image_url) {
+      return res.status(400).json({
+        success: false,
+        message: "Image is required",
       });
     }
 
@@ -604,7 +784,7 @@ app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
 
       // Get all PT numbers for this customer assigned to this agent
       const getCustomerPTsQuery = `
-        SELECT DISTINCT tac.pt_no 
+        SELECT DISTINCT tac.pt_no, tac.customer_id
         FROM tbl_auction_customers tac
         INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
         WHERE tac.customer_id = ? 
@@ -646,10 +826,10 @@ app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
           VALUES ?
         `;
 
-          // Prepare values for bulk insert
+          // Prepare values for bulk insert - FIXED: Use the actual customer_id from request
           const values = ptNumbers.map((pt_no) => [
             pt_no,
-            customer_id,
+            customer_id, // Use the customer_id from request body
             agentId,
             response_type,
             response_description,
@@ -662,6 +842,7 @@ app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
           ]);
 
           console.log(`Executing bulk insert with ${values.length} records`);
+          console.log("First record sample:", values[0]);
 
           db.query(insertQuery, [values], (err, results) => {
             if (err) {
@@ -688,6 +869,7 @@ app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
                 message: `Recovery response saved successfully for ${ptNumbers.length} loan account(s)`,
                 pt_count: ptNumbers.length,
                 pt_numbers: ptNumbers,
+                customer_id: customer_id, // Return the customer_id for verification
               });
             });
           });
@@ -851,6 +1033,111 @@ app.get(
     }
   }
 );
+// GET /api/check-customer-status/:customerId - Check if customer is visited
+app.get("/api/check-customer-status/:customerId", authenticateToken, (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const agentId = req.user.userId;
+
+    console.log("Checking customer status for:", customerId, "by agent:", agentId);
+
+    // First check if customer has any PT numbers that are visited
+    const checkVisitedQuery = `
+      SELECT isVisited 
+      FROM tbl_assigned_agents 
+      WHERE assigned_agent_id = ? 
+        AND pt_no IN (
+          SELECT pt_no FROM tbl_auction_customers WHERE customer_id = ?
+        )
+      ORDER BY isVisited DESC 
+      LIMIT 1
+    `;
+
+    db.query(checkVisitedQuery, [agentId, customerId], (err, visitedResults) => {
+      if (err) {
+        console.error("Database error checking visited status:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Error checking customer status",
+        });
+      }
+
+      const isVisited = visitedResults.length > 0 && visitedResults[0].isVisited === 1;
+
+      if (isVisited) {
+        // If visited, get the existing response with image URL
+        const getResponseQuery = `
+          SELECT * FROM tbl_recovery_responses 
+          WHERE customer_id = ? AND agent_id = ?
+          ORDER BY response_timestamp DESC 
+          LIMIT 1
+        `;
+
+        db.query(getResponseQuery, [customerId, agentId], (err, responseResults) => {
+          if (err) {
+            console.error("Database error fetching existing response:", err);
+            return res.status(500).json({
+              success: false,
+              message: "Error fetching existing response",
+            });
+          }
+
+          let existingResponse = null;
+          if (responseResults.length > 0) {
+            const response = responseResults[0];
+            
+            // Handle location coordinates
+            let latitude = null;
+            let longitude = null;
+            if (response.location_coordinates) {
+              try {
+                if (typeof response.location_coordinates === 'string') {
+                  const locationData = JSON.parse(response.location_coordinates);
+                  latitude = locationData.latitude;
+                  longitude = locationData.longitude;
+                } else if (typeof response.location_coordinates === 'object') {
+                  latitude = response.location_coordinates.latitude;
+                  longitude = response.location_coordinates.longitude;
+                }
+              } catch (parseError) {
+                console.error("Error parsing location coordinates:", parseError);
+              }
+            }
+
+            existingResponse = {
+              response_type: response.response_text,
+              response_description: response.response_description,
+              image_url: response.image_url, // IMPORTANT: Ensure image_url is included
+              latitude: latitude,
+              longitude: longitude,
+              response_timestamp: response.response_timestamp,
+              pt_no: response.pt_no,
+            };
+          }
+
+          res.json({
+            success: true,
+            isVisited: true,
+            existingResponse: existingResponse,
+          });
+        });
+      } else {
+        // Not visited
+        res.json({
+          success: true,
+          isVisited: false,
+          existingResponse: null,
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Error checking customer status:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error checking customer status",
+    });
+  }
+});
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${PORT}`);
