@@ -81,7 +81,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     setCheckingExisting(false);
     setCurrentStep(1);
   };
-
+  
   // STEP 1: Check if customer is already visited
   const checkCustomerStatus = async () => {
     try {
@@ -123,11 +123,13 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 result.existingResponse.response_type ||
                   result.existingResponse.response_text
               );
+
+              // ALWAYS set the description from existing response, regardless of response type
               setResponseDescription(
-                result.existingResponse.response_description
+                result.existingResponse.response_description || ""
               );
 
-              // Set captured image data if available - IMPORTANT: Set image for visited customers
+              // Set captured image data if available
               if (result.existingResponse.image_url) {
                 const fullImageUrl =
                   result.existingResponse.image_url.startsWith("http")
@@ -148,11 +150,11 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 setUploadedImageUrl(result.existingResponse.image_url);
               }
             }
-            setCurrentStep(1); // Stay on step 1 (view only)
+            setCurrentStep(1);
           } else {
             // Customer not visited - proceed to step 2
             setIsAlreadyVisited(false);
-            setCurrentStep(2); // Move to response selection
+            setCurrentStep(2);
           }
         } else {
           Alert.alert("Error", "Failed to check customer status");
@@ -260,11 +262,11 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
   // STEP 2: Handle response selection
   const handleResponseSelect = (value) => {
     setSelectedResponse(value);
-    if (value !== "Others") {
-      setResponseDescription(value); // Auto-fill description with selected response
-    } else {
-      setResponseDescription(""); // Clear for Others
-    }
+    // if (value !== "Others") {
+    //   setResponseDescription(value); // Auto-fill description with selected response
+    // } else {
+    //   setResponseDescription(""); // Clear for Others
+    // }f
   };
 
   // STEP 3: Handle image capture
@@ -325,14 +327,6 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
 
   // Save response to database
   const saveResponseToDatabase = async () => {
-    if (isAlreadyVisited) {
-      Alert.alert(
-        "Already Visited",
-        "This customer has already been visited. Cannot update response."
-      );
-      return;
-    }
-
     // STRICT VALIDATION: Check if all required fields are present
     if (!selectedResponse) {
       Alert.alert(
@@ -347,6 +341,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
       return;
     }
 
+    // NEW: Only require description if response is "Others"
     if (selectedResponse === "Others" && !responseDescription.trim()) {
       Alert.alert(
         "Description Required",
@@ -358,34 +353,49 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     try {
       setSaving(true);
 
-      // Upload the image first
-      let imageUrl = null;
-      try {
-        imageUrl = await uploadImageToServer(capturedImage.imageUri);
-        setUploadedImageUrl(imageUrl);
-      } catch (uploadError) {
-        console.error("Failed to upload image:", uploadError);
-        Alert.alert(
-          "Image Upload Failed",
-          "Cannot save response without image. Please try capturing the image again.",
-          [{ text: "OK" }]
-        );
-        setSaving(false);
-        return;
+      // Upload the image first (only if it's a new image)
+      let imageUrl = uploadedImageUrl;
+      if (capturedImage && !capturedImage.imageUri.startsWith("http")) {
+        try {
+          imageUrl = await uploadImageToServer(capturedImage.imageUri);
+          setUploadedImageUrl(imageUrl);
+        } catch (uploadError) {
+          console.error("Failed to upload image:", uploadError);
+          Alert.alert(
+            "Image Upload Failed",
+            "Cannot save response without image. Please try capturing the image again.",
+            [{ text: "OK" }]
+          );
+          setSaving(false);
+          return;
+        }
+      }
+
+      // NEW LOGIC: Determine what to store in response_description
+      let finalResponseDescription = responseDescription;
+
+      if (selectedResponse === "Others") {
+        // For "Others", use the custom description
+        finalResponseDescription = responseDescription;
+      } else {
+        // For standard responses, use empty string if no description provided
+        // or use the custom description if provided
+        finalResponseDescription = responseDescription || "";
       }
 
       // Prepare response data
       const responseData = {
         customer_id: person.customer_id || person.entry_id,
         response_type: selectedResponse,
-        response_description: responseDescription || selectedResponse,
+        response_description: finalResponseDescription, // Use the new logic
         image_url: imageUrl,
         latitude: capturedImage?.location?.latitude || null,
         longitude: capturedImage?.location?.longitude || null,
       };
 
-      console.log("Saving response with data:", responseData);
+      console.log("Saving/Updating response with data:", responseData);
 
+      // Use the same endpoint for both create and update
       const response = await fetch(`${BASE_URL}/api/save-recovery-response`, {
         method: "POST",
         headers: {
@@ -404,7 +414,17 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
       const result = await response.json();
 
       if (result.success) {
-        console.log("Response saved successfully:", result);
+        console.log("Response saved/updated successfully:", result);
+
+        // Update local state to reflect the changes
+        setIsAlreadyVisited(true);
+        setExistingResponse({
+          response_text: selectedResponse,
+          response_description: finalResponseDescription,
+          image_url: imageUrl,
+          latitude: capturedImage?.location?.latitude,
+          longitude: capturedImage?.location?.longitude,
+        });
 
         // Call the callback to notify parent component
         if (onResponseSaved) {
@@ -413,7 +433,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
 
         Alert.alert(
           "Success",
-          `Response saved successfully for ${result.pt_count} loan account(s)!`,
+          `Response ${existingResponse ? "updated" : "saved"} successfully for ${result.pt_count} loan account(s)!`,
           [
             {
               text: "OK",
@@ -432,13 +452,14 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     }
   };
 
+  // Update isSaveEnabled logic
+  const isSaveEnabled =
+    selectedResponse &&
+    capturedImage &&
+    (selectedResponse !== "Others" || responseDescription.trim());
+
   // Handle save button press
   const handleSave = () => {
-    if (isAlreadyVisited) {
-      Alert.alert("Already Visited", "This customer has already been visited.");
-      return;
-    }
-
     // Final validation before saving
     if (!selectedResponse || !capturedImage) {
       Alert.alert(
@@ -448,22 +469,26 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
       return;
     }
 
+    const actionText = isAlreadyVisited ? "update" : "save";
+
     Alert.alert(
-      "Confirm Save",
-      "This response will be saved for all loan accounts of this customer. Continue?",
+      `Confirm ${actionText.charAt(0).toUpperCase() + actionText.slice(1)}`,
+      `This response will be ${actionText}d for all loan accounts of this customer. Continue?`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Save", onPress: saveResponseToDatabase },
+        {
+          text: actionText.charAt(0).toUpperCase() + actionText.slice(1),
+          onPress: saveResponseToDatabase,
+        },
       ]
     );
   };
 
   // Check if save button should be enabled
-  const isSaveEnabled =
-    !isAlreadyVisited &&
-    selectedResponse &&
-    capturedImage &&
-    (selectedResponse !== "Others" || responseDescription.trim());
+  // const isSaveEnabled =
+  //   selectedResponse &&
+  //   capturedImage &&
+  //   (selectedResponse !== "Others" || responseDescription.trim());
 
   if (!person) return null;
 
@@ -526,57 +551,6 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Progress Steps */}
-        {/* <View style={tw`flex-row justify-between items-center mb-4`}>
-          <View style={tw`flex-row items-center`}>
-            <View
-              style={[
-                tw`w-6 h-6 rounded-full items-center justify-center`,
-                currentStep >= 1 ? tw`bg-green-500` : tw`bg-gray-300`,
-              ]}
-            >
-              <Text style={tw`text-white text-xs font-bold`}>1</Text>
-            </View>
-            <Text
-              style={tw`text-xs ml-1 ${currentStep >= 1 ? "text-green-600" : "text-gray-500"}`}
-            >
-              Check Status
-            </Text>
-          </View>
-
-          <View style={tw`flex-row items-center`}>
-            <View
-              style={[
-                tw`w-6 h-6 rounded-full items-center justify-center`,
-                currentStep >= 2 ? tw`bg-green-500` : tw`bg-gray-300`,
-              ]}
-            >
-              <Text style={tw`text-white text-xs font-bold`}>2</Text>
-            </View>
-            <Text
-              style={tw`text-xs ml-1 ${currentStep >= 2 ? "text-green-600" : "text-gray-500"}`}
-            >
-              Add Response
-            </Text>
-          </View>
-
-          <View style={tw`flex-row items-center`}>
-            <View
-              style={[
-                tw`w-6 h-6 rounded-full items-center justify-center`,
-                currentStep >= 3 ? tw`bg-green-500` : tw`bg-gray-300`,
-              ]}
-            >
-              <Text style={tw`text-white text-xs font-bold`}>3</Text>
-            </View>
-            <Text
-              style={tw`text-xs ml-1 ${currentStep >= 3 ? "text-green-600" : "text-gray-500"}`}
-            >
-              Capture Image
-            </Text>
-          </View>
-        </View> */}
-
         <ScrollView style={tw`px-2`} showsVerticalScrollIndicator={false}>
           <Text
             style={[
@@ -586,6 +560,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           >
             {person.name}
           </Text>
+
           {/* Personal Information - Always Show */}
           <View
             style={[
@@ -603,7 +578,6 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </Text>
 
             <InfoRow label="Customer ID" value={person.customer_id} />
-            {/* <InfoRow label="Name" value={person.customer_name || person.name} /> */}
             <InfoRow label="City" value={person.city || person.address} />
             <InfoRow label="Address" value={person.address} />
             <InfoRow
@@ -628,7 +602,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
               </Text>
             </View>
           )}
-
+          {/* 
           {isAlreadyVisited && !checkingExisting && (
             <View
               style={tw`bg-green-50 border border-green-200 rounded-lg p-4 mb-4`}
@@ -640,13 +614,12 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 </Text>
               </View>
               <Text style={tw`text-green-600 text-xs text-center mt-1`}>
-                This customer has already been visited. Viewing existing
-                response.
+                This customer has already been visited. You can update the response.
               </Text>
             </View>
-          )}
+          )} */}
 
-          {/* Customer Response Section - Show for both visited and non-visited */}
+          {/* Customer Response Section - Always show but allow editing */}
           <View
             style={[
               tw`border-2 rounded-lg p-4 mb-4`,
@@ -661,7 +634,9 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             >
               Customer Response
               {isAlreadyVisited && (
-                <Text style={tw`text-green-600 text-sm ml-2`}>(Saved)</Text>
+                <Text style={tw`text-green-600 text-sm ml-2`}>
+                  (Saved - You can update)
+                </Text>
               )}
             </Text>
 
@@ -669,9 +644,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
               <View
                 style={[
                   tw`border rounded-lg`,
-                  isAlreadyVisited
-                    ? tw`bg-gray-100 border-gray-300`
-                    : tw`border-gray-300 bg-white`,
+                  tw`border-gray-300 bg-white`, // Always editable now
                 ]}
               >
                 <RNPickerSelect
@@ -687,15 +660,14 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                     { label: "Requested time", value: "Requested time" },
                     { label: "Others", value: "Others" },
                   ]}
-                  disabled={isAlreadyVisited}
                   style={{
                     inputAndroid: {
                       ...tw`text-sm pl-3 pr-3 py-3`,
-                      color: isAlreadyVisited ? "#6b7280" : "#1f2937",
+                      color: "#1f2937",
                     },
                     inputIOS: {
                       ...tw`text-sm pl-3 pr-3 py-3`,
-                      color: isAlreadyVisited ? "#6b7280" : "#1f2937",
+                      color: "#1f2937",
                     },
                     placeholder: {
                       color: "gray",
@@ -705,20 +677,14 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
               </View>
             </View>
 
-            {/* Response Description */}
+            {/* Response Description - Always editable */}
             <TextInput
               value={responseDescription}
-              onChangeText={isAlreadyVisited ? null : setResponseDescription}
+              onChangeText={setResponseDescription}
               placeholder="Enter response description..."
               multiline
               numberOfLines={3}
-              editable={!isAlreadyVisited}
-              style={[
-                tw`border rounded-lg p-3 text-sm`,
-                isAlreadyVisited
-                  ? tw`bg-gray-100 border-gray-300 text-gray-600`
-                  : tw`border-gray-300 text-gray-800 bg-white`,
-              ]}
+              style={tw`border border-gray-300 rounded-lg p-3 text-sm text-gray-800 bg-white`}
             />
           </View>
 
@@ -735,18 +701,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 {isAlreadyVisited
                   ? "Previously Captured Image"
                   : "Captured Image"}
-              </Text>
-
-              {__DEV__ && (
-                <View style={tw`bg-yellow-100 p-2 rounded mb-2`}>
-                  <Text style={tw`text-xs`}>
-                    Image URL: {capturedImage.imageUri}
-                  </Text>
-                  {console.log("Captured Image URI:", capturedImage.imageUri)}
-                  <Text style={tw`text-xs`}>Base URL: {BASE_URL}</Text>
-                  {console.log("Base URL:", BASE_URL)}
-                </View>
-              )}
+              </Text>              
 
               <TouchableOpacity onPress={() => setImageViewVisible(true)}>
                 <View
@@ -857,8 +812,8 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </Text>
           </Pressable>
 
-          {/* Save Button - Only show if not visited and all steps completed */}
-          {!isAlreadyVisited && (
+          {/* Save/Update Button - Show for both visited and non-visited */}
+          {!isAlreadyVisited ? (
             <Pressable
               onPress={handleSave}
               disabled={!isSaveEnabled || saving}
@@ -875,6 +830,26 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
               ) : (
                 <Text style={tw`text-white text-lg font-bold text-center`}>
                   {isSaveEnabled ? "Save Response" : "Complete Steps"}
+                </Text>
+              )}
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={handleSave}
+              disabled={!isSaveEnabled || saving}
+              style={[
+                tw`rounded-full px-8 py-3 flex-1 ml-2`,
+                {
+                  backgroundColor: isSaveEnabled ? "#f59e0b" : "#9ca3af",
+                  opacity: isSaveEnabled ? 1 : 0.6,
+                },
+              ]}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={tw`text-white text-lg font-bold text-center`}>
+                  {isSaveEnabled ? "Update Response" : "Complete Steps"}
                 </Text>
               )}
             </Pressable>
@@ -901,7 +876,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           />
         </Modal>
 
-        {/* Image Viewing Modal - Updated to handle both visited and non-visited images */}
+        {/* Image Viewing Modal */}
         <ImageViewing
           images={[{ uri: capturedImage?.imageUri }]}
           imageIndex={0}

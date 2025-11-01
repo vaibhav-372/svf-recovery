@@ -37,21 +37,23 @@ const Customers = () => {
 
   // Enhanced visited status checker
   const isCustomerVisited = (customer) => {
-    const isVisited = customer.isVisited;
-    const visited = customer.visited;
-    
-    // Check isVisited field
-    if (isVisited === 1 || isVisited === true || isVisited === '1' || isVisited === 'true') {
-      return true;
-    }
-    
-    // Check visited field
-    if (visited === 1 || visited === true || visited === '1' || visited === 'true') {
-      return true;
-    }
-    
-    return false;
-  };
+  // For current agent's most recent visit status
+  const isVisited = customer.isVisited;
+  const visited = customer.visited;
+  
+  // Check isVisited field (current agent's most recent status)
+  if (isVisited === 1 || isVisited === true || isVisited === '1' || isVisited === 'true') {
+    return true;
+  }
+  
+  // Check visited field
+  if (visited === 1 || visited === true || visited === '1' || visited === 'true') {
+    return true;
+  }
+  
+  return false;
+};
+
 
   // Secure fetch wrapper
   const secureFetch = async (endpoint, options = {}) => {
@@ -90,8 +92,8 @@ const Customers = () => {
 
   // Update customer visited status
   const updateCustomerVisitedStatus = (customerId) => {
-    setCustomers(prevCustomers => 
-      prevCustomers.map(customer => 
+    setCustomers((prevCustomers) =>
+      prevCustomers.map((customer) =>
         customer.customer_id === customerId || customer.entry_id === customerId
           ? { ...customer, isVisited: 1, visited: 1 }
           : customer
@@ -100,93 +102,100 @@ const Customers = () => {
   };
 
   // Fetch customers independently - useCallback to prevent unnecessary re-renders
-  const fetchCustomers = useCallback(async (showLoader = true, forceRefresh = false) => {
-    // Don't fetch if we already have data and it's not a force refresh
-    if (dataLoaded && !forceRefresh && customers.length > 0) {
-      console.log("Using cached customers data");
-      if (showLoader) {
-        setLoading(false);
-      }
-      return;
-    }
-
-    try {
-      if (!token) {
-        throw new Error("Authentication token is missing");
+  const fetchCustomers = useCallback(
+    async (showLoader = true, forceRefresh = false) => {
+      // Don't fetch if we already have data and it's not a force refresh
+      if (dataLoaded && !forceRefresh && customers.length > 0) {
+        console.log("Using cached customers data");
+        if (showLoader) {
+          setLoading(false);
+        }
+        return;
       }
 
-      if (showLoader) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
+      try {
+        if (!token) {
+          throw new Error("Authentication token is missing");
+        }
+
+        if (showLoader) {
+          setLoading(true);
+        } else {
+          setRefreshing(true);
+        }
+        setError(null);
+
+        console.log("Fetching customers in Customers component");
+
+        const data = await secureFetch("/customers");
+
+        if (!data || typeof data !== "object") {
+          throw new Error("Invalid response from server");
+        }
+
+        if (data.success) {
+          const customersData = Array.isArray(data.customers)
+            ? data.customers
+            : [];
+
+          console.log(
+            `📥 Raw API response: ${customersData.length} customers received`
+          );
+
+          const validatedCustomers = customersData.map((customer) => ({
+            id: customer.entry_id || Math.random().toString(),
+            name: customer.customer_name || "N/A",
+            number: customer.contact_number1 || "N/A",
+            city: customer.address || "N/A",
+            isVisited: customer.isVisited || 0,
+            visited: customer.visited || 0,
+            // Include all original data for detailed view
+            ...customer,
+          }));
+
+          setCustomers(validatedCustomers);
+          setDataLoaded(true);
+
+          // Analytics
+          const totalFromServer = customersData.length;
+          const visitedCount = customersData.filter(isCustomerVisited).length;
+          const nonVisitedCount = totalFromServer - visitedCount;
+          console.log("📊 SERVER DATA ANALYSIS:");
+          console.log(`   Total: ${totalFromServer}`);
+          console.log(`   Non-visited: ${nonVisitedCount}`);
+          console.log(`   Visited: ${visitedCount}`);
+        } else {
+          throw new Error(data.message || "Failed to fetch customers");
+        }
+      } catch (error) {
+        console.error(
+          "Error fetching customers in Customers component:",
+          error
+        );
+
+        let errorMessage = "Network error. Please try again.";
+        if (error.message.includes("timeout")) {
+          errorMessage = "Request timeout. Please check your connection.";
+        } else if (error.message.includes("Authentication")) {
+          errorMessage = "Authentication failed. Please login again.";
+        } else if (error.message.includes("HTTP error")) {
+          errorMessage = "Server error. Please try again later.";
+        }
+
+        setError(errorMessage);
+        if (showLoader) {
+          Alert.alert("Error", errorMessage);
+        }
+      } finally {
+        if (showLoader) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
       }
-      setError(null);
-
-      console.log("Fetching customers in Customers component");
-
-      const data = await secureFetch("/customers");
-
-      if (!data || typeof data !== "object") {
-        throw new Error("Invalid response from server");
-      }
-
-      if (data.success) {
-        const customersData = Array.isArray(data.customers)
-          ? data.customers
-          : [];
-        
-        console.log(`📥 Raw API response: ${customersData.length} customers received`);
-        
-        const validatedCustomers = customersData.map((customer) => ({
-          id: customer.entry_id || Math.random().toString(),
-          name: customer.customer_name || "N/A",
-          number: customer.contact_number1 || "N/A",
-          city: customer.address || "N/A",
-          isVisited: customer.isVisited || 0,
-          visited: customer.visited || 0,
-          // Include all original data for detailed view
-          ...customer,
-        }));
-
-        setCustomers(validatedCustomers);
-        setDataLoaded(true);
-        
-        // Analytics
-        const totalFromServer = customersData.length;
-        const visitedCount = customersData.filter(isCustomerVisited).length;
-        const nonVisitedCount = totalFromServer - visitedCount;
-        console.log('📊 SERVER DATA ANALYSIS:');
-        console.log(`   Total: ${totalFromServer}`);
-        console.log(`   Non-visited: ${nonVisitedCount}`);
-        console.log(`   Visited: ${visitedCount}`);
-        
-      } else {
-        throw new Error(data.message || "Failed to fetch customers");
-      }
-    } catch (error) {
-      console.error("Error fetching customers in Customers component:", error);
-
-      let errorMessage = "Network error. Please try again.";
-      if (error.message.includes("timeout")) {
-        errorMessage = "Request timeout. Please check your connection.";
-      } else if (error.message.includes("Authentication")) {
-        errorMessage = "Authentication failed. Please login again.";
-      } else if (error.message.includes("HTTP error")) {
-        errorMessage = "Server error. Please try again later.";
-      }
-
-      setError(errorMessage);
-      if (showLoader) {
-        Alert.alert("Error", errorMessage);
-      }
-    } finally {
-      if (showLoader) {
-        setLoading(false);
-      } else {
-        setRefreshing(false);
-      }
-    }
-  }, [token, dataLoaded, customers.length]);
+    },
+    [token, dataLoaded, customers.length]
+  );
 
   // Manual refresh function
   const handleRefresh = useCallback(() => {
@@ -198,7 +207,7 @@ const Customers = () => {
     // Check if data was passed from CusList component
     if (route.params?.customers && route.params?.preloaded) {
       console.log("Using preloaded customers data from CusList");
-      
+
       const preloadedCustomers = route.params.customers.map((customer) => ({
         id: customer.entry_id || Math.random().toString(),
         name: customer.customer_name || "N/A",
@@ -208,13 +217,12 @@ const Customers = () => {
         visited: customer.visited || 0,
         ...customer,
       }));
-      
+
       setCustomers(preloadedCustomers);
       setDataLoaded(true);
       setLoading(false);
-      
+
       console.log(`📊 PRELOAD DATA: ${preloadedCustomers.length} customers`);
-      
     } else if (!dataLoaded) {
       // Fetch data independently if component opened directly and no data is loaded
       console.log("Fetching customers independently");
@@ -231,16 +239,16 @@ const Customers = () => {
   // Handle response saved callback from DetailedCust
   const handleResponseSaved = (customerId) => {
     console.log("✅ Response saved for customer:", customerId);
-    
+
     // Update the customer's visited status immediately
     updateCustomerVisitedStatus(customerId);
-    
+
     // Close the modal
     setModalVisible(false);
-    
+
     // Show success message
     Alert.alert(
-      "Success", 
+      "Success",
       "Response saved successfully! Customer marked as visited.",
       [{ text: "OK" }]
     );
@@ -267,11 +275,15 @@ const Customers = () => {
   );
 
   // Separate non-visited and visited customers
-  const nonVisitedCustomers = filteredCustomers.filter(customer => !isCustomerVisited(customer));
+  const nonVisitedCustomers = filteredCustomers.filter(
+    (customer) => !isCustomerVisited(customer)
+  );
   const visitedCustomers = filteredCustomers.filter(isCustomerVisited);
 
   // Calculate totals
-  const totalNonVisited = customers.filter(customer => !isCustomerVisited(customer)).length;
+  const totalNonVisited = customers.filter(
+    (customer) => !isCustomerVisited(customer)
+  ).length;
   const totalVisited = customers.filter(isCustomerVisited).length;
 
   if (loading) {
@@ -351,15 +363,21 @@ const Customers = () => {
           <View style={tw`mb-6`}>
             <View style={tw`flex-row items-center justify-between mb-3`}>
               <Text style={tw`text-base font-bold text-red-600`}>
-                Pending Customers ({nonVisitedCustomers.length}) / ({customers.length})
+                Pending Customers ({nonVisitedCustomers.length}) / (
+                {customers.length})
               </Text>
-              <View style={[tw`px-2 py-1 rounded-full`, { backgroundColor: '#fee2e2' }]}>
-                <Text style={[tw`text-xs font-semibold`, { color: '#991b1b' }]}>
+              <View
+                style={[
+                  tw`px-2 py-1 rounded-full`,
+                  { backgroundColor: "#fee2e2" },
+                ]}
+              >
+                <Text style={[tw`text-xs font-semibold`, { color: "#991b1b" }]}>
                   Action Required
                 </Text>
               </View>
             </View>
-            
+
             {nonVisitedCustomers.map((person) => (
               <TouchableOpacity
                 onPress={() => handlePress(person)}
@@ -370,7 +388,7 @@ const Customers = () => {
                     backgroundColor: "#fef2f2",
                     borderLeftColor: "#ef4444",
                     borderLeftWidth: 7,
-                  }
+                  },
                 ]}
               >
                 <View style={tw`flex-row justify-between items-start`}>
@@ -399,14 +417,11 @@ const Customers = () => {
                   <View
                     style={[
                       tw`px-2 py-1 rounded-full`,
-                      { backgroundColor: "#fee2e2" }
+                      { backgroundColor: "#fee2e2" },
                     ]}
                   >
                     <Text
-                      style={[
-                        tw`text-xs font-semibold`,
-                        { color: "#991b1b" },
-                      ]}
+                      style={[tw`text-xs font-semibold`, { color: "#991b1b" }]}
                     >
                       Pending
                     </Text>
@@ -422,15 +437,21 @@ const Customers = () => {
           <View style={tw`mb-4`}>
             <View style={tw`flex-row items-center justify-between mb-3`}>
               <Text style={tw`text-base font-bold text-green-600`}>
-                Completed Visits ({visitedCustomers.length}) / ({customers.length})
+                Completed Visits ({visitedCustomers.length}) / (
+                {customers.length})
               </Text>
-              <View style={[tw`px-2 py-1 rounded-full`, { backgroundColor: '#d1fae5' }]}>
-                <Text style={[tw`text-xs font-semibold`, { color: '#065f46' }]}>
+              <View
+                style={[
+                  tw`px-2 py-1 rounded-full`,
+                  { backgroundColor: "#d1fae5" },
+                ]}
+              >
+                <Text style={[tw`text-xs font-semibold`, { color: "#065f46" }]}>
                   Completed
                 </Text>
               </View>
             </View>
-            
+
             {visitedCustomers.map((person) => (
               <TouchableOpacity
                 onPress={() => handlePress(person)}
@@ -441,7 +462,7 @@ const Customers = () => {
                     backgroundColor: "#f0f9f0",
                     borderLeftColor: "#10b981",
                     borderLeftWidth: 7,
-                  }
+                  },
                 ]}
               >
                 <View style={tw`flex-row justify-between items-start`}>
@@ -470,14 +491,11 @@ const Customers = () => {
                   <View
                     style={[
                       tw`px-2 py-1 rounded-full`,
-                      { backgroundColor: "#d1fae5" }
+                      { backgroundColor: "#d1fae5" },
                     ]}
                   >
                     <Text
-                      style={[
-                        tw`text-xs font-semibold`,
-                        { color: "#065f46" },
-                      ]}
+                      style={[tw`text-xs font-semibold`, { color: "#065f46" }]}
                     >
                       Visited
                     </Text>
@@ -495,15 +513,19 @@ const Customers = () => {
             <Text style={tw`text-gray-600 text-xs mt-2 text-center`}>
               {searchQuery
                 ? "No customers found matching your search"
-                : "No customers available"
-              }
+                : "No customers available"}
             </Text>
             {searchQuery && (
               <TouchableOpacity
                 onPress={() => setSearchQuery("")}
-                style={[tw`px-3 py-1 rounded-lg mt-2`, { backgroundColor: "#7cc0d8" }]}
+                style={[
+                  tw`px-3 py-1 rounded-lg mt-2`,
+                  { backgroundColor: "#7cc0d8" },
+                ]}
               >
-                <Text style={tw`text-white font-semibold text-xs`}>Clear Search</Text>
+                <Text style={tw`text-white font-semibold text-xs`}>
+                  Clear Search
+                </Text>
               </TouchableOpacity>
             )}
           </View>

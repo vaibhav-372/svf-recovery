@@ -18,10 +18,12 @@ import jewel from "../assets/jewel.webp";
 import { Ionicons } from "@expo/vector-icons";
 import RNPickerSelect from "react-native-picker-select";
 import { useAuth } from "../context/AuthContext";
+import PreviousResponsesList from "./PreviousResponsesList";
+import PTPreviousResponses from "./PTPreviousResponses";
 
 const { width, height } = Dimensions.get("window");
 
-// Interest calculation function
+// Interest calculation function (keep this as is)
 const calculateLoanInterest = (
   principal,
   rate,
@@ -116,6 +118,10 @@ const CustRelated = ({ person, onClose }) => {
   const [saving, setSaving] = useState(false);
   const [individualResponses, setIndividualResponses] = useState({});
   const [existingResponses, setExistingResponses] = useState({});
+  const [visitedData, setVisitedData] = useState({});
+  const [showPreviousResponses, setShowPreviousResponses] = useState(false);
+  const [showPTPreviousResponses, setShowPTPreviousResponses] = useState(false);
+  const [selectedPT, setSelectedPT] = useState(null);
   const flatListRef = useRef(null);
 
   const { token } = useAuth();
@@ -141,14 +147,46 @@ const CustRelated = ({ person, onClose }) => {
 
       setIndividualResponses(initialResponses);
       loadExistingResponses(records);
+      loadVisitedStatus(records);
 
       console.log(`Loaded ${records.length} PT records`);
     } else {
       setCustomerRecords([]);
       setIndividualResponses({});
       setExistingResponses({});
+      setVisitedData({});
     }
   }, [person]);
+
+  const loadVisitedStatus = async (records) => {
+    try {
+      const customerId = person.customerInfo.customer_id;
+      const response = await fetch(
+        `${BASE_URL}/api/get-visited-status/${customerId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.visitedData) {
+          setVisitedData(result.visitedData);
+          console.log("Previous visit data loaded:", result.visitedData);
+        } else {
+          console.log("No previous visited data found");
+          setVisitedData({});
+        }
+      }
+    } catch (error) {
+      console.error("Error loading visited status:", error);
+      setVisitedData({});
+    }
+  };
 
   // Load existing responses for all PT numbers
   const loadExistingResponses = async (records) => {
@@ -183,10 +221,19 @@ const CustRelated = ({ person, onClose }) => {
             }
           });
           setIndividualResponses(updatedResponses);
+
+          console.log("Existing responses loaded:", result.existingResponses);
+        } else {
+          console.log("No existing responses found");
+          setExistingResponses({});
         }
+      } else {
+        console.log("Failed to load existing responses");
+        setExistingResponses({});
       }
     } catch (error) {
       console.error("Error loading existing responses:", error);
+      setExistingResponses({});
     }
   };
 
@@ -197,6 +244,11 @@ const CustRelated = ({ person, onClose }) => {
   });
 
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
+
+  const openPreviousResponses = (ptNo) => {
+    setSelectedPT(ptNo);
+    setShowPTPreviousResponses(true);
+  };
 
   // Helper function to get display value
   const getDisplayValue = (item, key) => {
@@ -284,7 +336,16 @@ const CustRelated = ({ person, onClose }) => {
     }));
   };
 
-  // Save individual text response for specific PT number
+  // Check if a specific PT has been visited
+  const isPTVisited = (ptNo) => {
+    return visitedData[ptNo] && visitedData[ptNo].isVisited === 1;
+  };
+
+  // Get visited response data for a PT
+  const getVisitedResponseData = (ptNo) => {
+    return visitedData[ptNo] || null;
+  };
+
   const saveIndividualResponse = async (ptNo) => {
     const responseData = individualResponses[ptNo];
 
@@ -298,7 +359,7 @@ const CustRelated = ({ person, onClose }) => {
 
     if (
       responseData.response === "Others" &&
-      !responseData.description.trim()
+      (!responseData.description || !responseData.description.trim())
     ) {
       Alert.alert(
         "Description Required",
@@ -310,16 +371,13 @@ const CustRelated = ({ person, onClose }) => {
     try {
       setSaving(true);
 
-      // Get the main image URL from the existing response (if any)
       let imageUrl = null;
       const customerId = person.customerInfo.customer_id;
 
-      // Try to get existing image URL for this customer
       const existingResponse = existingResponses[ptNo];
       if (existingResponse && existingResponse.image_url) {
         imageUrl = existingResponse.image_url;
       } else {
-        // If no existing image, try to get from any response for this customer
         const anyResponse = Object.values(existingResponses).find(
           (resp) => resp.image_url
         );
@@ -328,14 +386,21 @@ const CustRelated = ({ person, onClose }) => {
         }
       }
 
-      // Prepare response data for individual PT - matching the base endpoint structure
+      let finalResponseDescription = responseData.description;
+
+      if (responseData.response === "Others") {
+        finalResponseDescription = responseData.description;
+      } else {
+        finalResponseDescription = responseData.description || "";
+      }
+
       const saveData = {
         customer_id: customerId,
         pt_no: ptNo,
         response_type: responseData.response,
-        response_description: responseData.description || responseData.response,
-        image_url: imageUrl, // Use existing image or null
-        latitude: null, // Individual responses don't capture new location
+        response_description: finalResponseDescription,
+        image_url: imageUrl,
+        latitude: null,
         longitude: null,
       };
 
@@ -361,13 +426,11 @@ const CustRelated = ({ person, onClose }) => {
       if (result.success) {
         console.log("Individual response saved successfully:", result);
 
-        // Update existing responses state
         setExistingResponses((prev) => ({
           ...prev,
           [ptNo]: {
             response_text: responseData.response,
-            response_description:
-              responseData.description || responseData.response,
+            response_description: finalResponseDescription,
             image_url: imageUrl,
             pt_no: ptNo,
           },
@@ -389,6 +452,33 @@ const CustRelated = ({ person, onClose }) => {
     }
   };
 
+  // Render previous responses section for each PT
+  const renderPreviousResponsesSection = (ptNo) => {
+    const visitedData = getVisitedResponseData(ptNo);
+    const hasPreviousVisit = visitedData !== null;
+
+    if (!hasPreviousVisit) return null;
+
+    return (
+      <View style={[tw`border rounded-lg p-3 mb-4`, { borderColor: "#f59e0b" }]}>
+        <TouchableOpacity 
+          onPress={() => openPreviousResponses(ptNo)}
+          style={tw`flex-row justify-between items-center`}
+        >
+          <View style={tw`flex-1`}>
+            <Text style={[tw`text-lg font-semibold`, { color: "#f59e0b" }]}>
+              📋 Previous Visit Responses
+            </Text>
+            <Text style={tw`text-sm text-gray-600 mt-1`}>
+              Tap to view all previous visit responses for this PT number
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#f59e0b" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderItem = ({ item, index }) => {
     const ptNo = getDisplayValue(item, "pt_no");
     const currentResponse = individualResponses[ptNo] || {
@@ -396,6 +486,7 @@ const CustRelated = ({ person, onClose }) => {
       description: "",
     };
     const existingResponse = existingResponses[ptNo];
+    const hasPreviousVisit = isPTVisited(ptNo);
 
     return (
       <ScrollView
@@ -405,15 +496,32 @@ const CustRelated = ({ person, onClose }) => {
       >
         {/* PT Number Header */}
         <View style={[tw`mb-4 p-4 rounded-lg`, { backgroundColor: "#7cc0d8" }]}>
-          <Text style={tw`text-center text-lg font-bold text-white`}>
-            PT Number: {ptNo}
-          </Text>
-          <Text style={tw`text-center text-sm text-white opacity-90 mt-1`}>
-            Record {index + 1} of {customerRecords.length}
-          </Text>
+          <View style={tw`flex-row justify-between items-center`}>
+            <View style={tw`flex-1`}>
+              <Text style={tw`text-center text-lg font-bold text-white`}>
+                PT Number: {ptNo}
+              </Text>
+              <Text style={tw`text-center text-sm text-white opacity-90 mt-1`}>
+                Record {index + 1} of {customerRecords.length}
+              </Text>
+            </View>
+            {hasPreviousVisit && (
+              <TouchableOpacity 
+                onPress={() => openPreviousResponses(ptNo)}
+                style={tw`bg-green-500 px-3 py-1 rounded-full`}
+              >
+                <Text style={tw`text-white text-xs font-bold`}>
+                  Previous visits
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        {/* Individual Text Response Section */}
+        {/* Show previous responses section if available */}
+        {renderPreviousResponsesSection(ptNo)}
+
+        {/* Current Visit Response Section */}
         <View
           style={[tw`border-2 rounded-lg p-4 mb-4`, { borderColor: "#7cc0d8" }]}
         >
@@ -423,27 +531,60 @@ const CustRelated = ({ person, onClose }) => {
               { color: "#7cc0d8" },
             ]}
           >
-            Individual Text Response
+            Current Visit Response
           </Text>
 
-          {existingResponse && existingResponse.image_url && (
-            <View
-              style={tw`bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3`}
-            >
-              <Text style={tw`text-blue-800 text-sm text-center`}>
-                📸 Image already captured for this visit
-              </Text>
+          {/* Show existing response status */}
+          {existingResponse && (
+            <View style={tw`mb-3`}>
+              <View
+                style={tw`bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2`}
+              >
+                <Text
+                  style={tw`text-blue-800 text-sm text-center font-semibold`}
+                >
+                  ✅ Response already saved for current visit
+                </Text>
+                <Text style={tw`text-blue-700 text-xs text-center mt-1`}>
+                  Last updated:{" "}
+                  {existingResponse.response_timestamp
+                    ? new Date(
+                        existingResponse.response_timestamp
+                      ).toLocaleString()
+                    : "Recently"}
+                </Text>
+              </View>
+
+              {/* Show existing image status */}
+              {existingResponse.image_url && (
+                <View
+                  style={tw`bg-green-50 border border-green-200 rounded-lg p-2`}
+                >
+                  <Text style={tw`text-green-700 text-xs text-center`}>
+                    📸 Image captured for current visit
+                  </Text>
+                </View>
+              )}
             </View>
           )}
 
+          {/* Response Selection */}
           <View style={tw`mb-3`}>
+            <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>
+              Select Response:
+            </Text>
             <View style={tw`border border-gray-300 rounded-lg bg-white`}>
               <RNPickerSelect
                 onValueChange={(value) =>
                   handleIndividualResponseChange(ptNo, "response", value)
                 }
                 value={currentResponse.response}
-                placeholder={{ label: "Select response...", value: "" }}
+                placeholder={{
+                  label: existingResponse
+                    ? "Update response..."
+                    : "Select response...",
+                  value: "",
+                }}
                 items={[
                   { label: "Call not lifting", value: "Call not lifting" },
                   {
@@ -469,42 +610,32 @@ const CustRelated = ({ person, onClose }) => {
           </View>
 
           {/* Response Description */}
-          <TextInput
-            value={currentResponse.description}
-            onChangeText={(value) =>
-              handleIndividualResponseChange(ptNo, "description", value)
-            }
-            placeholder="Enter response description..."
-            multiline
-            numberOfLines={3}
-            style={tw`border border-gray-300 rounded-lg p-3 text-sm text-gray-800 bg-white`}
-          />
-
-          {/* Existing Response Info */}
-          {existingResponse && (
-            <View
-              style={tw`mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200`}
-            >
-              <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>
-                Current Saved Response:
-              </Text>
-              <Text style={tw`text-sm text-gray-600`}>
-                {existingResponse.response_text}
-              </Text>
-              {existingResponse.response_description && (
-                <Text style={tw`text-sm text-gray-500 mt-1`}>
-                  {existingResponse.response_description}
-                </Text>
-              )}
-            </View>
-          )}
+          <View style={tw`mb-3`}>
+            <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>
+              Description:
+            </Text>
+            <TextInput
+              value={currentResponse.description}
+              onChangeText={(value) =>
+                handleIndividualResponseChange(ptNo, "description", value)
+              }
+              placeholder={
+                existingResponse && existingResponse.response_description
+                  ? "Update description..."
+                  : "Enter response description..."
+              }
+              multiline
+              numberOfLines={3}
+              style={tw`border border-gray-300 rounded-lg p-3 text-sm text-gray-800 bg-white`}
+            />
+          </View>
 
           {/* Save Individual Response Button */}
           <TouchableOpacity
             onPress={() => saveIndividualResponse(ptNo)}
             disabled={saving || !currentResponse.response}
             style={[
-              tw`rounded-full px-6 py-3 mt-4`,
+              tw`rounded-full px-6 py-3 mt-2`,
               {
                 backgroundColor: currentResponse.response
                   ? "#10b981"
@@ -517,9 +648,7 @@ const CustRelated = ({ person, onClose }) => {
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
               <Text style={tw`text-white text-lg font-bold text-center`}>
-                {existingResponse
-                  ? "Update Text Response"
-                  : "Save Text Response"}
+                {existingResponse ? "Update Response" : "Save Response"}
               </Text>
             )}
           </TouchableOpacity>
@@ -540,7 +669,6 @@ const CustRelated = ({ person, onClose }) => {
           >
             Loan Details
           </Text>
-
           <InfoRow
             label="Loan Amount"
             value={getDisplayValue(item, "loan_amount")}
@@ -596,7 +724,6 @@ const CustRelated = ({ person, onClose }) => {
           >
             Ornament Details
           </Text>
-
           <InfoRow
             label="Ornament Type"
             value={getDisplayValue(item, "ornament_name")}
@@ -639,14 +766,26 @@ const CustRelated = ({ person, onClose }) => {
     <View style={tw`flex-1 bg-white`}>
       {/* Header */}
       <View style={tw`px-4 py-3 border-b border-gray-200`}>
-        <Text style={tw`text-center text-xl font-bold text-gray-800`}>
-          {getCustomerName()}
-        </Text>
-        <Text style={tw`text-center text-sm text-gray-600 mt-1`}>
-          {customerRecords.length} Loan Account(s)
-        </Text>
+        <View style={tw`flex-row justify-between items-center`}>
+          <View style={tw`flex-1`}>
+            <Text style={tw`text-center text-xl font-bold text-gray-800`}>
+              {getCustomerName()}
+            </Text>
+            <Text style={tw`text-center text-sm text-gray-600 mt-1`}>
+              {customerRecords.length} Loan Account(s)
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setShowPreviousResponses(true)}
+            style={tw`ml-4 p-2 bg-blue-100 rounded-lg`}
+          >
+            <Ionicons name="list" size={20} color="#3b82f6" />
+          </TouchableOpacity>
+        </View>
         <Text style={tw`text-center text-xs text-blue-600 mt-1`}>
-          You can update text responses for individual PT numbers
+          {Object.keys(visitedData).length > 0
+            ? "Previous visit responses available"
+            : "No previous visit responses"}
         </Text>
       </View>
 
@@ -691,12 +830,33 @@ const CustRelated = ({ person, onClose }) => {
         <Text style={tw`text-white text-lg font-bold`}>Close</Text>
       </Pressable>
 
-      {/* Image Viewing Modal */}
       <ImageViewing
         images={[require("../assets/jewel.webp")]}
         imageIndex={0}
         visible={imageViewVisible}
         onRequestClose={() => setImageViewVisible(false)}
+      />
+
+      <PreviousResponsesList
+        visible={showPreviousResponses}
+        onClose={() => setShowPreviousResponses(false)}
+        customerId={person?.customerInfo?.customer_id}
+        token={token}
+        BASE_URL={BASE_URL}
+        customerName={getCustomerName()}
+      />
+
+      <PTPreviousResponses
+        visible={showPTPreviousResponses}
+        onClose={() => {
+          setShowPTPreviousResponses(false);
+          setSelectedPT(null);
+        }}
+        customerId={person?.customerInfo?.customer_id}
+        ptNo={selectedPT}
+        token={token}
+        BASE_URL={BASE_URL}
+        customerName={getCustomerName()}
       />
     </View>
   );

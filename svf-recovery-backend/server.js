@@ -337,10 +337,29 @@ app.get("/api/customers", authenticateToken, (req, res) => {
 
     const getCustomersQuery = `
       SELECT 
-      tac.*, taa.*
-      FROM tbl_auction_customers as tac, tbl_assigned_agents as taa
-      WHERE taa.assigned_agent_id = ? AND taa.is_closed = 0 AND tac.pt_no = taa.pt_no
-      Group BY tac.customer_id
+        tac.*, 
+        taa.*
+      FROM tbl_auction_customers tac
+      INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
+      WHERE taa.assigned_agent_id = ? 
+        AND taa.is_closed = 0 
+        AND taa.no_of_visit = (
+          SELECT MAX(taa2.no_of_visit)
+          FROM tbl_assigned_agents taa2
+          WHERE taa2.cus_auction_id = tac.customer_id
+        )
+        AND taa.assigned_agent_id = (
+          SELECT taa3.assigned_agent_id
+          FROM tbl_assigned_agents taa3
+          WHERE taa3.cus_auction_id = tac.customer_id
+          AND taa3.no_of_visit = (
+            SELECT MAX(taa4.no_of_visit)
+            FROM tbl_assigned_agents taa4
+            WHERE taa4.cus_auction_id = tac.customer_id
+          )
+          LIMIT 1
+        )
+      GROUP BY tac.customer_id
       ORDER BY taa.assigned_at DESC
     `;
 
@@ -390,11 +409,27 @@ app.get("/api/customers/:customerId/loans", authenticateToken, (req, res) => {
         taa.*,
         tac.entry_id as customer_entry_id,
         taa.entry_id as assignment_entry_id
-      FROM tbl_auction_customers as tac
-      INNER JOIN tbl_assigned_agents as taa ON tac.pt_no = taa.pt_no
+      FROM tbl_auction_customers tac
+      INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
       WHERE tac.customer_id = ? 
         AND taa.assigned_agent_id = ?
         AND taa.is_closed = 0
+        AND taa.no_of_visit = (
+          SELECT MAX(taa2.no_of_visit)
+          FROM tbl_assigned_agents taa2
+          WHERE taa2.cus_auction_id = tac.customer_id
+        )
+        AND taa.assigned_agent_id = (
+          SELECT taa3.assigned_agent_id
+          FROM tbl_assigned_agents taa3
+          WHERE taa3.cus_auction_id = tac.customer_id
+          AND taa3.no_of_visit = (
+            SELECT MAX(taa4.no_of_visit)
+            FROM tbl_assigned_agents taa4
+            WHERE taa4.cus_auction_id = tac.customer_id
+          )
+          LIMIT 1
+        )
       ORDER BY tac.loan_created_date DESC
     `;
 
@@ -469,18 +504,34 @@ app.get(
       );
 
       const getCustomerLoansQuery = `
-      SELECT 
-        tac.*, 
-        taa.*,
-        tac.entry_id as customer_entry_id,
-        taa.entry_id as assignment_entry_id
-      FROM tbl_auction_customers as tac
-      INNER JOIN tbl_assigned_agents as taa ON tac.pt_no = taa.pt_no
-      WHERE tac.customer_name = ? 
-        AND taa.assigned_agent_id = ?
-        AND taa.is_closed = 0
-      ORDER BY tac.loan_created_date DESC
-    `;
+        SELECT 
+          tac.*, 
+          taa.*,
+          tac.entry_id as customer_entry_id,
+          taa.entry_id as assignment_entry_id
+        FROM tbl_auction_customers tac
+        INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
+        WHERE tac.customer_name = ? 
+          AND taa.assigned_agent_id = ?
+          AND taa.is_closed = 0
+          AND taa.no_of_visit = (
+            SELECT MAX(taa2.no_of_visit)
+            FROM tbl_assigned_agents taa2
+            WHERE taa2.cus_auction_id = tac.customer_id
+          )
+          AND taa.assigned_agent_id = (
+            SELECT taa3.assigned_agent_id
+            FROM tbl_assigned_agents taa3
+            WHERE taa3.cus_auction_id = tac.customer_id
+            AND taa3.no_of_visit = (
+              SELECT MAX(taa4.no_of_visit)
+              FROM tbl_assigned_agents taa4
+              WHERE taa4.cus_auction_id = tac.customer_id
+            )
+            LIMIT 1
+          )
+        ORDER BY tac.loan_created_date DESC
+      `;
 
       db.query(
         getCustomerLoansQuery,
@@ -546,166 +597,7 @@ app.get(
   }
 );
 
-// // Save recovery response endpoint (PROTECTED ROUTE)
-// app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
-//   try {
-//     const agentId = req.user.userId;
-//     const {
-//       customer_id,
-//       response_type,
-//       response_description,
-//       image_url,
-//       latitude,
-//       longitude,
-//     } = req.body;
-
-//     console.log("Received recovery response data:", req.body);
-
-//     console.log("Saving recovery response for agent:", agentId);
-
-//     // Validate required fields
-//     if (!customer_id || !response_type || !response_description) {
-//       return res.status(400).json({
-//         success: false,
-//         message:
-//           "Missing required fields: customer_id, response_type, response_description",
-//       });
-//     }
-
-//     // Generate location coordinates if available
-//     let location_coordinates = null;
-//     if (latitude && longitude) {
-//       location_coordinates = JSON.stringify({
-//         latitude: parseFloat(latitude),
-//         longitude: parseFloat(longitude),
-//       });
-//     }
-
-//     // Get branch_id from agent profile
-//     const getAgentQuery =
-//       "SELECT branch_id FROM tbl_emp_profile WHERE entry_id = ?";
-
-//     db.query(getAgentQuery, [agentId], (err, agentResults) => {
-//       if (err) {
-//         console.error("Error fetching agent details:", err);
-//         return res.status(500).json({
-//           success: false,
-//           message: "Error fetching agent information",
-//         });
-//       }
-
-//       if (agentResults.length === 0) {
-//         return res.status(404).json({
-//           success: false,
-//           message: "Agent not found",
-//         });
-//       }
-
-//       const branch_id = agentResults[0].branch_id;
-//       const device_id = req.headers["user-agent"] || "mobile-app";
-
-//       // Get all PT numbers for this customer assigned to this agent
-//       const getCustomerPTsQuery = `
-//         SELECT DISTINCT tac.pt_no
-//         FROM tbl_auction_customers tac
-//         INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
-//         WHERE tac.customer_id = ?
-//           AND taa.assigned_agent_id = ?
-//           AND taa.is_closed = 0
-//       `;
-
-//       db.query(
-//         getCustomerPTsQuery,
-//         [customer_id, agentId],
-//         (err, ptResults) => {
-//           if (err) {
-//             console.error("Error fetching customer PTs:", err);
-//             return res.status(500).json({
-//               success: false,
-//               message: "Error fetching customer loan accounts",
-//             });
-//           }
-
-//           if (ptResults.length === 0) {
-//             return res.status(404).json({
-//               success: false,
-//               message: "No active loan accounts found for this customer",
-//             });
-//           }
-
-//           const ptNumbers = ptResults.map((row) => row.pt_no);
-//           console.log(
-//             `Saving response for ${ptNumbers.length} PT numbers:`,
-//             ptNumbers
-//           );
-
-//           // Prepare insert query for bulk insert
-//           const insertQuery = `
-//           INSERT INTO tbl_recovery_responses
-//           (pt_no, customer_id, agent_id, response_text, response_description,
-//            response_timestamp, image_url, location_coordinates, completed_date,
-//            device_id, branch_id)
-//           VALUES ?
-//         `;
-
-//           // Prepare values for bulk insert
-//           const values = ptNumbers.map((pt_no) => [
-//             pt_no,
-//             customer_id,
-//             agentId,
-//             response_type,
-//             response_description,
-//             new Date(),
-//             image_url,
-//             location_coordinates,
-//             new Date(),
-//             device_id,
-//             branch_id,
-//           ]);
-
-//           console.log(`Executing bulk insert with ${values.length} records`);
-
-//           db.query(insertQuery, [values], (err, results) => {
-//             if (err) {
-//               console.error("Database error saving recovery responses:", err);
-//               return res.status(500).json({
-//                 success: false,
-//                 message: "Failed to save recovery responses: " + err.message,
-//               });
-//             }
-
-//             console.log(
-//               `Recovery responses saved successfully for ${ptNumbers.length} PT numbers. Affected rows:`,
-//               results.affectedRows
-//             );
-
-//             // Update isVisited to 1 for all PT numbers in tbl_assigned_agents
-//             updateIsVisited(agentId, ptNumbers, (updateErr) => {
-//               if (updateErr) {
-//                 console.error("Error updating isVisited status:", updateErr);
-//               }
-
-//               res.json({
-//                 success: true,
-//                 message: `Recovery response saved successfully for ${ptNumbers.length} loan account(s)`,
-//                 pt_count: ptNumbers.length,
-//                 pt_numbers: ptNumbers,
-//               });
-//             });
-//           });
-//         }
-//       );
-//     });
-//   } catch (error) {
-//     console.error("Server error saving recovery response:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server error while saving response: " + error.message,
-//     });
-//   }
-// });
-
-// server.js - Updated save-recovery-response endpoint
+// Save recovery response endpoint (PROTECTED ROUTE) - FIXED VERSION
 app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
   try {
     const agentId = req.user.userId;
@@ -736,10 +628,14 @@ app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
       });
     }
 
-    if (!response_description) {
+    // NEW: Only require description if response is "Others"
+    if (
+      response_type === "Others" &&
+      (!response_description || !response_description.trim())
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Response description is required",
+        message: "Description is required for 'Others' response",
       });
     }
 
@@ -782,15 +678,31 @@ app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
       const branch_id = agentResults[0].branch_id;
       const device_id = req.headers["user-agent"] || "mobile-app";
 
-      // Get all PT numbers for this customer assigned to this agent
+      // In the save-recovery-response endpoint, update the getCustomerPTsQuery:
       const getCustomerPTsQuery = `
-        SELECT DISTINCT tac.pt_no, tac.customer_id
-        FROM tbl_auction_customers tac
-        INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
-        WHERE tac.customer_id = ? 
-          AND taa.assigned_agent_id = ?
-          AND taa.is_closed = 0
-      `;
+  SELECT DISTINCT tac.pt_no, tac.customer_id, taa.no_of_visit
+  FROM tbl_auction_customers tac
+  INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
+  WHERE tac.customer_id = ? 
+    AND taa.assigned_agent_id = ?
+    AND taa.is_closed = 0
+    AND taa.no_of_visit = (
+      SELECT MAX(taa2.no_of_visit)
+      FROM tbl_assigned_agents taa2
+      WHERE taa2.cus_auction_id = tac.customer_id
+    )
+    AND taa.assigned_agent_id = (
+      SELECT taa3.assigned_agent_id
+      FROM tbl_assigned_agents taa3
+      WHERE taa3.cus_auction_id = tac.customer_id
+      AND taa3.no_of_visit = (
+        SELECT MAX(taa4.no_of_visit)
+        FROM tbl_assigned_agents taa4
+        WHERE taa4.cus_auction_id = tac.customer_id
+      )
+      LIMIT 1
+    )
+`;
 
       db.query(
         getCustomerPTsQuery,
@@ -811,70 +723,217 @@ app.post("/api/save-recovery-response", authenticateToken, async (req, res) => {
             });
           }
 
-          const ptNumbers = ptResults.map((row) => row.pt_no);
+          const ptData = ptResults.map((row) => ({
+            pt_no: row.pt_no,
+            no_of_visit: row.no_of_visit || 0,
+          }));
+
+          const ptNumbers = ptData.map((row) => row.pt_no);
           console.log(
-            `Saving response for ${ptNumbers.length} PT numbers:`,
+            `Processing response for ${ptNumbers.length} PT numbers:`,
             ptNumbers
           );
 
-          // Prepare insert query for bulk insert
-          const insertQuery = `
-          INSERT INTO tbl_recovery_responses 
-          (pt_no, customer_id, agent_id, response_text, response_description, 
-           response_timestamp, image_url, location_coordinates, completed_date, 
-           device_id, branch_id)
-          VALUES ?
+          // NEW LOGIC: Check for existing responses and handle update/insert
+          // Pass ptData instead of ptNumbers
+          checkAndSaveResponses(ptData);
+        }
+      );
+
+      // NEW FUNCTION: Handle the logic for checking existing responses and saving
+      function checkAndSaveResponses(ptData) {
+        const ptNumbers = ptData.map((row) => row.pt_no);
+
+        // Check if responses already exist for this customer and agent
+        const checkExistingQuery = `
+          SELECT pt_no FROM tbl_recovery_responses 
+          WHERE customer_id = ? AND agent_id = ?
         `;
 
-          // Prepare values for bulk insert - FIXED: Use the actual customer_id from request
-          const values = ptNumbers.map((pt_no) => [
-            pt_no,
-            customer_id, // Use the customer_id from request body
-            agentId,
-            response_type,
-            response_description,
-            new Date(),
-            image_url,
-            location_coordinates,
-            new Date(),
-            device_id,
-            branch_id,
-          ]);
-
-          console.log(`Executing bulk insert with ${values.length} records`);
-          console.log("First record sample:", values[0]);
-
-          db.query(insertQuery, [values], (err, results) => {
-            if (err) {
-              console.error("Database error saving recovery responses:", err);
+        db.query(
+          checkExistingQuery,
+          [customer_id, agentId],
+          (checkErr, existingResults) => {
+            if (checkErr) {
+              console.error("Error checking existing responses:", checkErr);
               return res.status(500).json({
                 success: false,
-                message: "Failed to save recovery responses: " + err.message,
+                message: "Error checking existing responses",
               });
             }
 
-            console.log(
-              `Recovery responses saved successfully for ${ptNumbers.length} PT numbers. Affected rows:`,
-              results.affectedRows
+            const existingPTs = existingResults.map((row) => row.pt_no);
+            const newPTs = ptData.filter(
+              (pt) => !existingPTs.includes(pt.pt_no)
+            );
+            const updatePTs = ptData.filter((pt) =>
+              existingPTs.includes(pt.pt_no)
             );
 
-            // Update isVisited to 1 for all PT numbers in tbl_assigned_agents
-            updateIsVisited(agentId, ptNumbers, (updateErr) => {
-              if (updateErr) {
-                console.error("Error updating isVisited status:", updateErr);
-              }
+            console.log(`Found ${existingPTs.length} existing responses`);
+            console.log(
+              `${updatePTs.length} PTs to update:`,
+              updatePTs.map((pt) => pt.pt_no)
+            );
+            console.log(
+              `${newPTs.length} new PTs to insert:`,
+              newPTs.map((pt) => pt.pt_no)
+            );
 
-              res.json({
-                success: true,
-                message: `Recovery response saved successfully for ${ptNumbers.length} loan account(s)`,
-                pt_count: ptNumbers.length,
-                pt_numbers: ptNumbers,
-                customer_id: customer_id, // Return the customer_id for verification
+            const promises = [];
+
+            // UPDATE existing responses
+            if (updatePTs.length > 0) {
+              // Since each PT might have different no_of_visit values, we need to update individually
+              updatePTs.forEach((pt) => {
+                const updatePromise = new Promise((resolve, reject) => {
+                  const updateQuery = `
+                    UPDATE tbl_recovery_responses 
+                    SET response_text = ?, response_description = ?, no_of_visit = ?,
+                        response_timestamp = ?, image_url = ?, location_coordinates = ?,
+                        completed_date = ?, device_id = ?
+                    WHERE customer_id = ? AND agent_id = ? AND pt_no = ?
+                  `;
+
+                  db.query(
+                    updateQuery,
+                    [
+                      response_type,
+                      response_description || "",
+                      pt.no_of_visit,
+                      new Date(),
+                      image_url,
+                      location_coordinates,
+                      new Date(),
+                      device_id,
+                      customer_id,
+                      agentId,
+                      pt.pt_no,
+                    ],
+                    (updateErr, updateResults) => {
+                      if (updateErr) {
+                        console.error(
+                          "Error updating response for PT:",
+                          pt.pt_no,
+                          updateErr
+                        );
+                        reject(updateErr);
+                      } else {
+                        console.log(`Updated response for PT: ${pt.pt_no}`);
+                        resolve(updateResults);
+                      }
+                    }
+                  );
+                });
+                promises.push(updatePromise);
               });
-            });
-          });
-        }
-      );
+            }
+
+            // INSERT new responses
+            if (newPTs.length > 0) {
+              const insertQuery = `
+              INSERT INTO tbl_recovery_responses 
+              (pt_no, customer_id, agent_id, response_text, response_description, no_of_visit,
+               response_timestamp, image_url, location_coordinates, completed_date, 
+               device_id, branch_id)
+              VALUES ?
+            `;
+
+              const insertValues = newPTs.map((pt) => [
+                pt.pt_no,
+                customer_id,
+                agentId,
+                response_type,
+                response_description || "",
+                pt.no_of_visit,
+                new Date(),
+                image_url,
+                location_coordinates,
+                new Date(),
+                device_id,
+                branch_id,
+              ]);
+
+              const insertPromise = new Promise((resolve, reject) => {
+                db.query(
+                  insertQuery,
+                  [insertValues],
+                  (insertErr, insertResults) => {
+                    if (insertErr) {
+                      console.error(
+                        "Error inserting new responses:",
+                        insertErr
+                      );
+                      reject(insertErr);
+                    } else {
+                      console.log(
+                        `Inserted ${insertResults.affectedRows} new responses`
+                      );
+                      resolve(insertResults);
+                    }
+                  }
+                );
+              });
+              promises.push(insertPromise);
+            }
+
+            // If no PTs to process (shouldn't happen, but just in case)
+            if (promises.length === 0) {
+              return res.status(400).json({
+                success: false,
+                message: "No PT numbers to process",
+              });
+            }
+
+            // Execute all operations
+            Promise.all(promises)
+              .then((results) => {
+                console.log(`All database operations completed successfully`);
+
+                // Update isVisited to 1 for all PT numbers in tbl_assigned_agents
+                updateIsVisited(agentId, ptNumbers, (updateErr) => {
+                  if (updateErr) {
+                    console.error(
+                      "Error updating isVisited status:",
+                      updateErr
+                    );
+                  }
+
+                  const wasUpdate = updatePTs.length > 0;
+                  const wasInsert = newPTs.length > 0;
+
+                  let message = "";
+                  if (wasUpdate && wasInsert) {
+                    message = `Recovery response updated for ${updatePTs.length} and saved for ${newPTs.length} loan account(s)`;
+                  } else if (wasUpdate) {
+                    message = `Recovery response updated successfully for ${updatePTs.length} loan account(s)`;
+                  } else {
+                    message = `Recovery response saved successfully for ${newPTs.length} loan account(s)`;
+                  }
+
+                  res.json({
+                    success: true,
+                    message: message,
+                    pt_count: ptNumbers.length,
+                    pt_numbers: ptNumbers,
+                    customer_id: customer_id,
+                    updated: updatePTs.length,
+                    inserted: newPTs.length,
+                    operation: wasUpdate ? "update" : "insert",
+                  });
+                });
+              })
+              .catch((error) => {
+                console.error("Error in save operations:", error);
+                return res.status(500).json({
+                  success: false,
+                  message:
+                    "Failed to save recovery responses: " + error.message,
+                });
+              });
+          }
+        );
+      }
     });
   } catch (error) {
     console.error("Server error saving recovery response:", error);
@@ -1051,13 +1110,17 @@ app.get(
 
       // First check if customer has any PT numbers that are visited
       const checkVisitedQuery = `
-      SELECT isVisited 
-      FROM tbl_assigned_agents 
-      WHERE assigned_agent_id = ? 
-        AND pt_no IN (
+      SELECT taa.isVisited 
+      FROM tbl_assigned_agents as taa, tbl_recovery_responses as trr
+      WHERE taa.assigned_agent_id = ? 
+        AND trr.pt_no IN (
           SELECT pt_no FROM tbl_auction_customers WHERE customer_id = ?
+        ) AND taa.no_of_visit = (
+          SELECT MAX(taa2.no_of_visit)
+          FROM tbl_assigned_agents AS taa2
+          WHERE taa2.pt_no = taa.pt_no
         )
-      ORDER BY isVisited DESC 
+      ORDER BY taa.isVisited DESC 
       LIMIT 1
     `;
 
@@ -1179,37 +1242,58 @@ app.get(
       console.log("Getting existing responses for customer:", customerId);
 
       const getResponsesQuery = `
-      SELECT pt_no, response_text, response_description, image_url, response_timestamp
-      FROM tbl_recovery_responses 
-      WHERE customer_id = ? AND agent_id = ?
-      ORDER BY response_timestamp DESC
-    `;
+        SELECT 
+          trr.pt_no,
+          trr.response_text,
+          trr.response_description,
+          trr.image_url,
+          trr.response_timestamp,
+          trr.no_of_visit
+        FROM 
+          tbl_recovery_responses AS trr
+        WHERE 
+          trr.customer_id = ?
+          AND trr.agent_id = ?
+          AND trr.no_of_visit = (
+            SELECT MAX(taa2.no_of_visit)
+            FROM tbl_assigned_agents AS taa2
+            WHERE taa2.pt_no = trr.pt_no 
+            AND taa2.assigned_agent_id = ?
+          )
+        ORDER BY 
+          trr.response_timestamp DESC
+      `;
 
-      db.query(getResponsesQuery, [customerId, agentId], (err, results) => {
-        if (err) {
-          console.error("Database error fetching existing responses:", err);
-          return res.status(500).json({
-            success: false,
-            message: "Error fetching existing responses",
+      db.query(
+        getResponsesQuery,
+        [customerId, agentId, agentId],
+        (err, results) => {
+          if (err) {
+            console.error("Database error fetching existing responses:", err);
+            return res.status(500).json({
+              success: false,
+              message: "Error fetching existing responses",
+            });
+          }
+
+          const existingResponses = {};
+          results.forEach((row) => {
+            existingResponses[row.pt_no] = {
+              response_text: row.response_text,
+              response_description: row.response_description,
+              image_url: row.image_url,
+              response_timestamp: row.response_timestamp,
+              no_of_visit: row.no_of_visit,
+            };
+          });
+
+          res.json({
+            success: true,
+            existingResponses: existingResponses,
+            total: results.length,
           });
         }
-
-        const existingResponses = {};
-        results.forEach((row) => {
-          existingResponses[row.pt_no] = {
-            response_text: row.response_text,
-            response_description: row.response_description,
-            image_url: row.image_url,
-            response_timestamp: row.response_timestamp,
-          };
-        });
-
-        res.json({
-          success: true,
-          existingResponses: existingResponses,
-          total: results.length,
-        });
-      });
+      );
     } catch (error) {
       console.error("Error getting existing responses:", error);
       res.status(500).json({
@@ -1241,7 +1325,7 @@ app.post(
       console.log("Individual PT number:", pt_no);
       console.log("Received customer_id:", customer_id);
 
-      // Validate required fields - STRICTER VALIDATION
+      // Validate required fields
       if (!customer_id) {
         return res.status(400).json({
           success: false,
@@ -1263,20 +1347,16 @@ app.post(
         });
       }
 
-      if (!response_description) {
+      // NEW LOGIC: Only require description if response is "Others"
+      if (
+        response_type === "Others" &&
+        (!response_description || !response_description.trim())
+      ) {
         return res.status(400).json({
           success: false,
-          message: "Response description is required",
+          message: "Description is required for 'Others' response",
         });
       }
-
-      // For individual responses, image is optional (can use existing image)
-      // if (!image_url) {
-      //   return res.status(400).json({
-      //     success: false,
-      //     message: "Image is required",
-      //   });
-      // }
 
       // Generate location coordinates if available
       let location_coordinates = null;
@@ -1310,21 +1390,26 @@ app.post(
         const branch_id = agentResults[0].branch_id;
         const device_id = req.headers["user-agent"] || "mobile-app";
 
-        // Check if this PT number belongs to the customer and agent
         const validatePTQuery = `
-        SELECT tac.pt_no 
-        FROM tbl_auction_customers tac
-        INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
-        WHERE tac.customer_id = ? 
-          AND tac.pt_no = ?
-          AND taa.assigned_agent_id = ?
-          AND taa.is_closed = 0
-        LIMIT 1
-      `;
+  SELECT tac.pt_no, taa.no_of_visit
+  FROM tbl_auction_customers tac
+  INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
+  WHERE tac.customer_id = ? 
+    AND tac.pt_no = ?
+    AND taa.assigned_agent_id = ?
+    AND taa.is_closed = 0
+    AND taa.no_of_visit = (
+      SELECT MAX(taa2.no_of_visit)
+      FROM tbl_assigned_agents AS taa2
+      WHERE taa2.pt_no = taa.pt_no 
+      AND taa2.assigned_agent_id = ?
+    )
+  LIMIT 1
+`;
 
         db.query(
           validatePTQuery,
-          [customer_id, pt_no, agentId],
+          [customer_id, pt_no, agentId, agentId],
           (validateErr, validateResults) => {
             if (validateErr) {
               console.error("Error validating PT number:", validateErr);
@@ -1341,9 +1426,30 @@ app.post(
               });
             }
 
+            // NEW LOGIC: Determine what to store in response_text and response_description
+            let finalResponseText = response_type;
+            let finalResponseDescription = response_description;
+
+            if (response_type === "Others") {
+              // For "Others", store the custom description in response_description
+              // Keep "Others" in response_text
+              finalResponseText = "Others";
+              finalResponseDescription = response_description;
+            } else {
+              // For standard responses, store the response in response_text
+              // and also in response_description (or keep existing description if any)
+              finalResponseText = response_type;
+              // If no custom description provided, use the response type as description
+              if (!response_description || !response_description.trim()) {
+                finalResponseDescription = response_type;
+              } else {
+                finalResponseDescription = response_description;
+              }
+            }
+
             // Check if response already exists for this PT number
             const checkExistingQuery = `
-          SELECT entry_id, image_url 
+          SELECT entry_id, image_url, response_description
           FROM tbl_recovery_responses 
           WHERE pt_no = ? AND agent_id = ? AND customer_id = ?
           LIMIT 1
@@ -1364,10 +1470,20 @@ app.post(
                 let finalImageUrl = image_url;
 
                 if (checkResults.length > 0) {
-                  // UPDATE existing response - preserve existing image if new image not provided
+                  // UPDATE existing response
                   const existingResponse = checkResults[0];
                   if (!finalImageUrl && existingResponse.image_url) {
                     finalImageUrl = existingResponse.image_url; // Preserve existing image
+                  }
+
+                  // Preserve existing description if new one is not provided and response is not "Others"
+                  if (
+                    !finalResponseDescription &&
+                    existingResponse.response_description &&
+                    response_type !== "Others"
+                  ) {
+                    finalResponseDescription =
+                      existingResponse.response_description;
                   }
 
                   const updateQuery = `
@@ -1379,8 +1495,8 @@ app.post(
             `;
 
                   const values = [
-                    response_type,
-                    response_description,
+                    finalResponseText,
+                    finalResponseDescription,
                     new Date(),
                     finalImageUrl,
                     location_coordinates,
@@ -1443,8 +1559,8 @@ app.post(
                     pt_no,
                     customer_id,
                     agentId,
-                    response_type,
-                    response_description,
+                    finalResponseText,
+                    finalResponseDescription,
                     new Date(),
                     finalImageUrl,
                     location_coordinates,
@@ -1539,25 +1655,332 @@ function updateIndividualIsVisited(agentId, ptNumbers, callback) {
   });
 }
 
-// Helper function to update isVisited status for individual PT
-function updateIndividualIsVisited(agentId, ptNo, callback) {
-  const updateQuery = `
-    UPDATE tbl_assigned_agents 
-    SET isVisited = 1 
-    WHERE assigned_agent_id = ? 
-      AND pt_no = ?
-  `;
+app.get(
+  "/api/get-visited-status/:customerId",
+  authenticateToken,
+  (req, res) => {
+    try {
+      const { customerId } = req.params;
+      const currentAgentId = req.user.userId;
 
-  db.query(updateQuery, [agentId, ptNo], (err, results) => {
-    if (err) {
-      console.error("Error updating individual isVisited status:", err);
-      return callback(err);
+      console.log(
+        "Checking customer status for:",
+        customerId,
+        "by current agent:",
+        currentAgentId
+      );
+
+      // Get visited status for current agent only with max no_of_visit
+      const checkVisitedQuery = `
+        SELECT 
+          aa.pt_no,
+          aa.isVisited,
+          rr.response_text,
+          rr.response_description,
+          rr.image_url,
+          rr.response_timestamp as visited_date,
+          rr.agent_id,
+          rr.no_of_visit,
+          ep.user_name as agent_name,
+          ep.full_name as agent_full_name
+        FROM tbl_assigned_agents aa
+        LEFT JOIN tbl_recovery_responses rr ON aa.pt_no = rr.pt_no 
+          AND rr.agent_id = ? 
+          AND rr.customer_id = ?
+          AND rr.no_of_visit = aa.no_of_visit
+        LEFT JOIN tbl_emp_profile ep ON rr.agent_id = ep.entry_id
+        WHERE aa.cus_auction_id = ? 
+          AND aa.assigned_agent_id = ?
+          AND aa.no_of_visit = (
+            SELECT MAX(aa2.no_of_visit)
+            FROM tbl_assigned_agents aa2
+            WHERE aa2.pt_no = aa.pt_no 
+            AND aa2.assigned_agent_id = ?
+          )
+        ORDER BY rr.response_timestamp DESC
+      `;
+
+      db.query(
+        checkVisitedQuery,
+        [
+          currentAgentId,
+          customerId,
+          customerId,
+          currentAgentId,
+          currentAgentId,
+        ],
+        (err, results) => {
+          if (err) {
+            console.error("Database error fetching visited status:", err);
+            return res.status(500).json({
+              success: false,
+              message: "Failed to fetch visited status",
+            });
+          }
+
+          // Group by PT number and get only current agent's responses
+          const visitedData = {};
+          const processedPTs = new Set();
+
+          results.forEach((row) => {
+            const ptNo = row.pt_no;
+
+            // Only process each PT once and only if it's visited by current agent
+            if (
+              !processedPTs.has(ptNo) &&
+              row.isVisited === 1 &&
+              row.agent_id === currentAgentId
+            ) {
+              visitedData[ptNo] = {
+                isVisited: row.isVisited,
+                visited_date: row.visited_date,
+                response_text: row.response_text,
+                response_description: row.response_description,
+                image_url: row.image_url,
+                agent_id: row.agent_id,
+                agent_name: row.agent_name,
+                agent_full_name: row.agent_full_name,
+                no_of_visit: row.no_of_visit,
+                is_current_agent: true,
+              };
+              processedPTs.add(ptNo);
+            }
+          });
+
+          console.log("Current agent visited data:", visitedData);
+
+          res.json({
+            success: true,
+            visitedData: visitedData,
+            total_visited_pts: Object.keys(visitedData).length,
+          });
+        }
+      );
+    } catch (error) {
+      console.error("Error fetching visited status:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch visited status",
+      });
     }
+  }
+);
 
-    console.log(`isVisited updated to 1 for individual PT: ${ptNo}`);
-    callback(null);
-  });
-}
+app.get(
+  "/api/get-all-previous-responses/:customerId",
+  authenticateToken,
+  (req, res) => {
+    try {
+      const { customerId } = req.params;
+      const currentAgentId = req.user.userId;
+
+      console.log("Getting all previous responses for customer:", customerId);
+
+      const getPreviousResponsesQuery = `
+        SELECT 
+          rr.*,
+          ep.user_name as agent_name,
+          ep.full_name as agent_full_name,
+          aa.assigned_at,
+          aa.isVisited
+        FROM tbl_recovery_responses rr
+        INNER JOIN tbl_emp_profile ep ON rr.agent_id = ep.entry_id
+        INNER JOIN tbl_assigned_agents aa ON rr.pt_no = aa.pt_no AND rr.agent_id = aa.assigned_agent_id
+        WHERE rr.customer_id = ? 
+        ORDER BY rr.response_timestamp DESC
+      `;
+
+      db.query(getPreviousResponsesQuery, [customerId], (err, results) => {
+        if (err) {
+          console.error("Database error fetching previous responses:", err);
+          return res.status(500).json({
+            success: false,
+            message: "Error fetching previous responses",
+          });
+        }
+
+        // Process the results to include location data
+        const processedResults = results.map((row) => {
+          let latitude = null;
+          let longitude = null;
+
+          if (row.location_coordinates) {
+            try {
+              const coords = row.location_coordinates;
+              if (typeof coords === "string" && coords.trim().startsWith("{")) {
+                const locationData = JSON.parse(coords);
+                latitude = locationData.latitude;
+                longitude = locationData.longitude;
+              } else if (typeof coords === "object" && coords !== null) {
+                latitude = coords.latitude;
+                longitude = coords.longitude;
+              }
+            } catch (parseError) {
+              console.error("Error parsing location coordinates:", parseError);
+            }
+          }
+
+          return {
+            entry_id: row.entry_id,
+            pt_no: row.pt_no,
+            customer_id: row.customer_id,
+            agent_id: row.agent_id,
+            agent_name: row.agent_name,
+            agent_full_name: row.agent_full_name,
+            response_text: row.response_text,
+            response_description: row.response_description,
+            response_timestamp: row.response_timestamp,
+            image_url: row.image_url,
+            location_coordinates: row.location_coordinates,
+            latitude: latitude,
+            longitude: longitude,
+            completed_date: row.completed_date,
+            device_id: row.device_id,
+            branch_id: row.branch_id,
+            assigned_at: row.assigned_at,
+            isVisited: row.isVisited,
+            is_current_agent: row.agent_id === currentAgentId,
+            visit_count: results.filter(
+              (r) => r.pt_no === row.pt_no && r.agent_id === row.agent_id
+            ).length,
+          };
+        });
+
+        console.log(
+          `Found ${processedResults.length} previous responses for customer ${customerId}`
+        );
+
+        res.json({
+          success: true,
+          previousResponses: processedResults,
+          total: processedResults.length,
+        });
+      });
+    } catch (error) {
+      console.error("Error fetching previous responses:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error fetching previous responses",
+      });
+    }
+  }
+);
+
+// GET /api/get-previous-responses-by-pt/:customerId/:ptNo - Get previous responses for specific PT number
+app.get(
+  "/api/get-previous-responses-by-pt/:customerId/:ptNo",
+  authenticateToken,
+  (req, res) => {
+    try {
+      const { customerId, ptNo } = req.params;
+      const currentAgentId = req.user.userId;
+
+      console.log(
+        "Getting previous responses for customer:",
+        customerId,
+        "PT:",
+        ptNo
+      );
+
+      const getPreviousResponsesQuery = `
+        SELECT 
+          rr.*,
+          ep.user_name as agent_name,
+          ep.full_name as agent_full_name,
+          aa.assigned_at,
+          aa.isVisited
+        FROM tbl_recovery_responses rr
+        INNER JOIN tbl_emp_profile ep ON rr.agent_id = ep.entry_id
+        INNER JOIN tbl_assigned_agents aa ON rr.pt_no = aa.pt_no AND rr.agent_id = aa.assigned_agent_id
+        WHERE rr.customer_id = ? AND rr.pt_no = ?
+        ORDER BY rr.response_timestamp DESC
+      `;
+
+      db.query(
+        getPreviousResponsesQuery,
+        [customerId, ptNo],
+        (err, results) => {
+          if (err) {
+            console.error(
+              "Database error fetching previous responses by PT:",
+              err
+            );
+            return res.status(500).json({
+              success: false,
+              message: "Error fetching previous responses",
+            });
+          }
+
+          // Process the results to include location data
+          const processedResults = results.map((row) => {
+            let latitude = null;
+            let longitude = null;
+
+            if (row.location_coordinates) {
+              try {
+                const coords = row.location_coordinates;
+                if (
+                  typeof coords === "string" &&
+                  coords.trim().startsWith("{")
+                ) {
+                  const locationData = JSON.parse(coords);
+                  latitude = locationData.latitude;
+                  longitude = locationData.longitude;
+                } else if (typeof coords === "object" && coords !== null) {
+                  latitude = coords.latitude;
+                  longitude = coords.longitude;
+                }
+              } catch (parseError) {
+                console.error(
+                  "Error parsing location coordinates:",
+                  parseError
+                );
+              }
+            }
+
+            return {
+              entry_id: row.entry_id,
+              pt_no: row.pt_no,
+              customer_id: row.customer_id,
+              agent_id: row.agent_id,
+              agent_name: row.agent_name,
+              agent_full_name: row.agent_full_name,
+              response_text: row.response_text,
+              response_description: row.response_description,
+              response_timestamp: row.response_timestamp,
+              image_url: row.image_url,
+              location_coordinates: row.location_coordinates,
+              latitude: latitude,
+              longitude: longitude,
+              completed_date: row.completed_date,
+              device_id: row.device_id,
+              branch_id: row.branch_id,
+              assigned_at: row.assigned_at,
+              isVisited: row.isVisited,
+              is_current_agent: row.agent_id === currentAgentId,
+            };
+          });
+
+          console.log(
+            `Found ${processedResults.length} previous responses for PT ${ptNo}`
+          );
+
+          res.json({
+            success: true,
+            previousResponses: processedResults,
+            total: processedResults.length,
+          });
+        }
+      );
+    } catch (error) {
+      console.error("Error fetching previous responses by PT:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error fetching previous responses",
+      });
+    }
+  }
+);
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${PORT}`);
