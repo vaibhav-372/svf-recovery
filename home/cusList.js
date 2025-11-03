@@ -30,12 +30,12 @@ const CusList = () => {
 
   // Enhanced visited status parser
   const parseVisitedStatus = (isVisited, visited) => {
-    console.log("Parsing visited status:", {
-      isVisited,
-      visited,
-      typeIsVisited: typeof isVisited,
-      typeVisited: typeof visited,
-    });
+    // console.log("Parsing visited status:", {
+    //   isVisited,
+    //   visited,
+    //   typeIsVisited: typeof isVisited,
+    //   typeVisited: typeof visited,
+    // });
 
     // Handle isVisited field first
     if (
@@ -87,7 +87,7 @@ const CusList = () => {
       setLoading(true);
       setError(null);
 
-      console.log("🔍 Fetching customers for agent:", user.username);
+      // console.log("🔍 Fetching customers for agent:", user.username);
 
       const response = await fetch(`${BASE_URL}/customers`, {
         method: "GET",
@@ -106,9 +106,9 @@ const CusList = () => {
       if (data.success) {
         const customers = Array.isArray(data.customers) ? data.customers : [];
 
-        console.log(
-          `📥 Raw API response: ${customers.length} customers received`
-        );
+        // console.log(
+        //   `📥 Raw API response: ${customers.length} customers received`
+        // );
 
         // Process and validate customers with detailed logging
         const validatedCustomers = customers.map((customer, index) => {
@@ -118,16 +118,16 @@ const CusList = () => {
           );
 
           // Log first 3 customers for debugging
-          if (index < 3) {
-            console.log("🔍 Sample customer visited analysis:", {
-              name: customer.customer_name,
-              rawIsVisited: customer.isVisited,
-              rawVisited: customer.visited,
-              parsedStatus: visitedStatus,
-              typeIsVisited: typeof customer.isVisited,
-              typeVisited: typeof customer.visited,
-            });
-          }
+          // if (index < 3) {
+          //   console.log("🔍 Sample customer visited analysis:", {
+          //     name: customer.customer_name,
+          //     rawIsVisited: customer.isVisited,
+          //     rawVisited: customer.visited,
+          //     parsedStatus: visitedStatus,
+          //     typeIsVisited: typeof customer.isVisited,
+          //     typeVisited: typeof customer.visited,
+          //   });
+          // }
 
           return {
             id: customer.entry_id || `cust-${index}-${Date.now()}`,
@@ -160,20 +160,20 @@ const CusList = () => {
           (c) => c.isVisited === 0
         ).length;
 
-        console.log("📊 Customer Analysis:");
-        console.log(`   Total: ${validatedCustomers.length}`);
-        console.log(`   Visited: ${visitedCount}`);
-        console.log(`   Non-visited: ${nonVisitedCount}`);
-        console.log(
-          `   Expected to show: ${nonVisitedCount} non-visited customers`
-        );
+        // console.log("📊 Customer Analysis:");
+        // console.log(`   Total: ${validatedCustomers.length}`);
+        // console.log(`   Visited: ${visitedCount}`);
+        // console.log(`   Non-visited: ${nonVisitedCount}`);
+        // console.log(
+        //   `   Expected to show: ${nonVisitedCount} non-visited customers`
+        // );
 
         // Log all customers with their visited status for debugging
-        validatedCustomers.forEach((customer) => {
-          console.log(
-            `   👤 ${customer.customer_name} - isVisited: ${customer.isVisited} (raw: ${customer._rawIsVisited})`
-          );
-        });
+        // validatedCustomers.forEach((customer) => {
+        //   console.log(
+        //     `   👤 ${customer.customer_name} - isVisited: ${customer.isVisited} (raw: ${customer._rawIsVisited})`
+        //   );
+        // });
       } else {
         throw new Error(data.message || "Failed to fetch customers");
       }
@@ -206,9 +206,9 @@ const CusList = () => {
   //   `🎯 Final non-visited count: ${nonVisitedCustomers.length}/${allCustomers.length}`
   // );
 
-  console.log(
-    `🎯 Final non-visited count: ${allCustomers.filter((c) => c.isVisited === 0).length}/${allCustomers.length}`
-  );
+  // console.log(
+  //   `🎯 Final non-visited count: ${allCustomers.filter((c) => c.isVisited === 0).length}/${allCustomers.length}`
+  // );
 
   const handleCardPress = (customer) => {
     console.log("👉 Customer selected:", customer.customer_name);

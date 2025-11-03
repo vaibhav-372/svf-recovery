@@ -1092,7 +1092,8 @@ app.get(
     }
   }
 );
-// GET /api/check-customer-status/:customerId - Check if customer is visited
+
+
 app.get(
   "/api/check-customer-status/:customerId",
   authenticateToken,
@@ -1108,25 +1109,28 @@ app.get(
         agentId
       );
 
-      // First check if customer has any PT numbers that are visited
+      // Check if customer has visited status AND if max visits match between both tables
       const checkVisitedQuery = `
-      SELECT taa.isVisited 
-      FROM tbl_assigned_agents as taa, tbl_recovery_responses as trr
-      WHERE taa.assigned_agent_id = ? 
-        AND trr.pt_no IN (
+        SELECT 
+          taa.isVisited,
+          taa.no_of_visit as agent_visit_no,
+          (SELECT MAX(no_of_visit) FROM tbl_recovery_responses WHERE customer_id = ?) as response_visit_no
+        FROM tbl_assigned_agents as taa
+        WHERE taa.pt_no IN (
           SELECT pt_no FROM tbl_auction_customers WHERE customer_id = ?
-        ) AND taa.no_of_visit = (
+        ) 
+        AND taa.no_of_visit = (
           SELECT MAX(taa2.no_of_visit)
           FROM tbl_assigned_agents AS taa2
           WHERE taa2.pt_no = taa.pt_no
         )
-      ORDER BY taa.isVisited DESC 
-      LIMIT 1
-    `;
+        ORDER BY taa.isVisited ASC 
+        LIMIT 1
+      `;
 
       db.query(
         checkVisitedQuery,
-        [agentId, customerId],
+        [customerId, customerId],
         (err, visitedResults) => {
           if (err) {
             console.error("Database error checking visited status:", err);
@@ -1136,21 +1140,35 @@ app.get(
             });
           }
 
-          const isVisited =
-            visitedResults.length > 0 && visitedResults[0].isVisited === 1;
+          if (visitedResults.length === 0) {
+            return res.json({
+              success: true,
+              isVisited: false,
+              existingResponse: null,
+            });
+          }
 
-          if (isVisited) {
-            // If visited, get the existing response with image URL
+          const visitedData = visitedResults[0];
+          const isVisited = visitedData.isVisited === 1;
+          const agentMaxVisit = visitedData.agent_visit_no;
+          const responseMaxVisit = visitedData.response_visit_no;
+
+          // Check if max visits match AND customer is visited
+          const shouldShowResponse =
+            isVisited && agentMaxVisit === responseMaxVisit;
+
+          if (shouldShowResponse) {
+            // If visited and max visits match, get the existing response with image URL
             const getResponseQuery = `
-          SELECT * FROM tbl_recovery_responses 
-          WHERE customer_id = ? AND agent_id = ?
-          ORDER BY response_timestamp DESC 
-          LIMIT 1
-        `;
+              SELECT * FROM tbl_recovery_responses 
+              WHERE customer_id = ? AND agent_id = ? AND no_of_visit = ?
+              ORDER BY response_timestamp DESC 
+              LIMIT 1
+            `;
 
             db.query(
               getResponseQuery,
-              [customerId, agentId],
+              [customerId, agentId, responseMaxVisit],
               (err, responseResults) => {
                 if (err) {
                   console.error(
@@ -1195,11 +1213,12 @@ app.get(
                   existingResponse = {
                     response_type: response.response_text,
                     response_description: response.response_description,
-                    image_url: response.image_url, // IMPORTANT: Ensure image_url is included
+                    image_url: response.image_url,
                     latitude: latitude,
                     longitude: longitude,
                     response_timestamp: response.response_timestamp,
                     pt_no: response.pt_no,
+                    no_of_visit: response.no_of_visit,
                   };
                 }
 
@@ -1207,15 +1226,19 @@ app.get(
                   success: true,
                   isVisited: true,
                   existingResponse: existingResponse,
+                  visitMatch: true,
                 });
               }
             );
           } else {
-            // Not visited
+            // Not visited OR max visits don't match
             res.json({
               success: true,
-              isVisited: false,
+              isVisited: isVisited,
               existingResponse: null,
+              visitMatch: agentMaxVisit === responseMaxVisit,
+              agentMaxVisit: agentMaxVisit,
+              responseMaxVisit: responseMaxVisit,
             });
           }
         }
@@ -1436,15 +1459,9 @@ app.post(
               finalResponseText = "Others";
               finalResponseDescription = response_description;
             } else {
-              // For standard responses, store the response in response_text
-              // and also in response_description (or keep existing description if any)
               finalResponseText = response_type;
-              // If no custom description provided, use the response type as description
-              if (!response_description || !response_description.trim()) {
-                finalResponseDescription = response_type;
-              } else {
-                finalResponseDescription = response_description;
-              }
+
+              finalResponseDescription = response_description || "";
             }
 
             // Check if response already exists for this PT number
@@ -1476,10 +1493,11 @@ app.post(
                     finalImageUrl = existingResponse.image_url; // Preserve existing image
                   }
 
-                  // Preserve existing description if new one is not provided and response is not "Others"
                   if (
-                    !finalResponseDescription &&
+                    (!finalResponseDescription ||
+                      finalResponseDescription.trim() === "") &&
                     existingResponse.response_description &&
+                    existingResponse.response_description.trim() !== "" &&
                     response_type !== "Others"
                   ) {
                     finalResponseDescription =

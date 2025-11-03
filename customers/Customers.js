@@ -138,9 +138,9 @@ const Customers = () => {
             ? data.customers
             : [];
 
-          console.log(
-            `📥 Raw API response: ${customersData.length} customers received`
-          );
+          // console.log(
+          //   `📥 Raw API response: ${customersData.length} customers received`
+          // );
 
           const validatedCustomers = customersData.map((customer) => ({
             id: customer.entry_id || Math.random().toString(),
@@ -160,10 +160,10 @@ const Customers = () => {
           const totalFromServer = customersData.length;
           const visitedCount = customersData.filter(isCustomerVisited).length;
           const nonVisitedCount = totalFromServer - visitedCount;
-          console.log("📊 SERVER DATA ANALYSIS:");
-          console.log(`   Total: ${totalFromServer}`);
-          console.log(`   Non-visited: ${nonVisitedCount}`);
-          console.log(`   Visited: ${visitedCount}`);
+          // console.log("📊 SERVER DATA ANALYSIS:");
+          // console.log(`   Total: ${totalFromServer}`);
+          // console.log(`   Non-visited: ${nonVisitedCount}`);
+          // console.log(`   Visited: ${visitedCount}`);
         } else {
           throw new Error(data.message || "Failed to fetch customers");
         }

@@ -81,95 +81,141 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     setCheckingExisting(false);
     setCurrentStep(1);
   };
-  
-  // STEP 1: Check if customer is already visited
-  const checkCustomerStatus = async () => {
-    try {
-      const customerId = person.customer_id || person.entry_id;
 
-      if (!customerId) {
-        console.log("No customer ID found");
-        Alert.alert("Error", "Customer ID not found");
-        return;
+// STEP 1: Check if customer is already visited
+const checkCustomerStatus = async () => {
+  try {
+    const customerId = person.customer_id || person.entry_id;
+
+    if (!customerId) {
+      console.log("No customer ID found");
+      Alert.alert("Error", "Customer ID not found");
+      return;
+    }
+
+    setCheckingExisting(true);
+    console.log("STEP 1: Checking customer status for:", customerId);
+
+    // Use the same API endpoint as CustRelated
+    const response = await fetch(
+      `${BASE_URL}/api/get-existing-responses/${customerId}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       }
+    );
 
-      setCheckingExisting(true);
-      console.log("STEP 1: Checking customer status for:", customerId);
+    if (response.ok) {
+      const result = await response.json();
+      console.log("FULL API RESPONSE for existing responses:", JSON.stringify(result, null, 2));
 
-      const response = await fetch(
-        `${BASE_URL}/api/check-customer-status/${customerId}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      if (result.success) {
+        // Check if there are any existing responses
+        const existingResponses = result.existingResponses || {};
+        const hasExistingResponses = Object.keys(existingResponses).length > 0;
+        
+        if (hasExistingResponses) {
+          // Customer already visited - show existing data
+          setIsAlreadyVisited(true);
+          
+          // Get the first existing response (since DetailedCust shows combined response)
+          const firstPtNo = Object.keys(existingResponses)[0];
+          const existingResponse = existingResponses[firstPtNo];
+          
+          setExistingResponse(existingResponse);
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log("Customer status check result:", result);
+          console.log("Using existing response data:", existingResponse);
 
-        if (result.success) {
-          if (result.isVisited) {
-            // Customer already visited - show existing data
-            setIsAlreadyVisited(true);
-            setExistingResponse(result.existingResponse);
+          // Pre-fill the form with existing data
+          if (existingResponse) {
+            // Map response text to picker value
+            const responseText = 
+              existingResponse.response_type || 
+              existingResponse.response_text || 
+              "";
 
-            // Pre-fill the form with existing data
-            if (result.existingResponse) {
-              setSelectedResponse(
-                result.existingResponse.response_type ||
-                  result.existingResponse.response_text
-              );
+            console.log("Extracted response text:", responseText);
 
-              // ALWAYS set the description from existing response, regardless of response type
-              setResponseDescription(
-                result.existingResponse.response_description || ""
-              );
+            // Ensure the response text matches one of the picker options
+            const validResponses = [
+              "Call not lifting",
+              "1111111111111111",
+              "Customer not at home",
+              "Requested time",
+              "Others",
+            ];
 
-              // Set captured image data if available
-              if (result.existingResponse.image_url) {
-                const fullImageUrl =
-                  result.existingResponse.image_url.startsWith("http")
-                    ? result.existingResponse.image_url
-                    : `${BASE_URL}${result.existingResponse.image_url}`;
-
-                setCapturedImage({
-                  imageUri: fullImageUrl,
-                  location:
-                    result.existingResponse.latitude &&
-                    result.existingResponse.longitude
-                      ? {
-                          latitude: result.existingResponse.latitude,
-                          longitude: result.existingResponse.longitude,
-                        }
-                      : null,
-                });
-                setUploadedImageUrl(result.existingResponse.image_url);
-              }
+            if (validResponses.includes(responseText)) {
+              setSelectedResponse(responseText);
+              console.log("Set selected response to:", responseText);
+            } else if (responseText) {
+              // If it's a custom response, set to "Others"
+              setSelectedResponse("Others");
+              console.log("Set selected response to Others for:", responseText);
+            } else {
+              setSelectedResponse("");
+              console.log("No valid response text found");
             }
-            setCurrentStep(1);
-          } else {
-            // Customer not visited - proceed to step 2
-            setIsAlreadyVisited(false);
-            setCurrentStep(2);
+
+            // Set description
+            const description = existingResponse.response_description || "";
+            setResponseDescription(description);
+            console.log("Set response description to:", description);
+
+            // Set captured image data if available
+            const imageUrl = existingResponse.image_url;
+
+            if (imageUrl) {
+              const fullImageUrl = imageUrl.startsWith("http")
+                ? imageUrl
+                : `${BASE_URL}${imageUrl}`;
+
+              setCapturedImage({
+                imageUri: fullImageUrl,
+                location:
+                  existingResponse.latitude && existingResponse.longitude
+                    ? {
+                        latitude: existingResponse.latitude,
+                        longitude: existingResponse.longitude,
+                      }
+                    : null,
+              });
+              setUploadedImageUrl(imageUrl);
+              console.log("Set captured image with URL:", imageUrl);
+            } else {
+              // Ensure capturedImage is null if no existing image
+              setCapturedImage(null);
+              setUploadedImageUrl(null);
+              console.log("No image URL found");
+            }
           }
+          setCurrentStep(1);
         } else {
-          Alert.alert("Error", "Failed to check customer status");
+          // Customer not visited - proceed to step 2
+          setIsAlreadyVisited(false);
+          setCurrentStep(2);
+          console.log("Customer not visited, proceeding to step 2");
         }
       } else {
-        console.log("Response not OK, status:", response.status);
+        console.log("API returned success: false");
         Alert.alert("Error", "Failed to check customer status");
       }
-    } catch (error) {
-      console.error("Error checking customer status:", error);
+    } else {
+      console.log("Response not OK, status:", response.status);
+      const errorText = await response.text();
+      console.log("Error response:", errorText);
       Alert.alert("Error", "Failed to check customer status");
-    } finally {
-      setCheckingExisting(false);
     }
-  };
+  } catch (error) {
+    console.error("Error checking customer status:", error);
+    Alert.alert("Error", "Failed to check customer status");
+  } finally {
+    setCheckingExisting(false);
+  }
+};
 
   const fetchAllCustomerPTs = async (customerId) => {
     try {
@@ -226,6 +272,36 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     }
   };
 
+  useEffect(() => {
+    if (person) {
+      console.log(
+        "DetailedCust opened for person:",
+        person.customer_id,
+        person.customer_name
+      );
+      resetForm();
+      checkCustomerStatus();
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(translateYAnim, {
+          toValue: 0,
+          friction: 6,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+
+    // Cleanup function
+    return () => {
+      setModalVisible(false);
+      setSelectedPerson(null);
+    };
+  }, [person]);
+
   const handleViewDetails = async () => {
     if (loadingRelated) return;
 
@@ -247,15 +323,32 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
         allPTs: allPTs.length > 0 ? allPTs : [person],
       };
 
+      console.log("Setting selected person and opening modal");
+
       setSelectedPerson(customerData);
-      setModalVisible(true);
+
+      // Small delay to ensure state is set before opening modal
+      setTimeout(() => {
+        setModalVisible(true);
+      }, 100);
     } catch (error) {
       console.error("Error in handleViewDetails:", error);
-      setSelectedPerson({
+      // setSelectedPerson({
+      //   customerInfo: person,
+      //   allPTs: [person],
+      // });
+      // setModalVisible(true);
+
+      const customerData = {
         customerInfo: person,
         allPTs: [person],
-      });
-      setModalVisible(true);
+      };
+      setSelectedPerson(customerData);
+      setTimeout(() => {
+        setModalVisible(true);
+      }, 100);
+    } finally {
+      setLoadingRelated(false);
     }
   };
 
@@ -534,8 +627,8 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </Text>
           </TouchableOpacity>
 
-          {/* Camera Button */}
-          <TouchableOpacity
+
+          {/* <TouchableOpacity
             onPress={() => (isAlreadyVisited ? null : setCameraVisible(true))}
             disabled={isAlreadyVisited || checkingExisting}
           >
@@ -548,7 +641,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 color={isAlreadyVisited ? "#9ca3af" : "#7cc0d8"}
               />
             )}
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
 
         <ScrollView style={tw`px-2`} showsVerticalScrollIndicator={false}>
@@ -633,7 +726,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
               ]}
             >
               Customer Response
-              {isAlreadyVisited && (
+              {isAlreadyVisited && existingResponse && (
                 <Text style={tw`text-green-600 text-sm ml-2`}>
                   (Saved - You can update)
                 </Text>
@@ -644,7 +737,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
               <View
                 style={[
                   tw`border rounded-lg`,
-                  tw`border-gray-300 bg-white`, // Always editable now
+                  tw`border-gray-300 bg-white`, 
                 ]}
               >
                 <RNPickerSelect
@@ -653,6 +746,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                   placeholder={{ label: "Select response...", value: "" }}
                   items={[
                     { label: "Call not lifting", value: "Call not lifting" },
+                    { label: "1111111111111111", value: "1111111111111111" },
                     {
                       label: "Customer not at home",
                       value: "Customer not at home",
@@ -701,7 +795,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 {isAlreadyVisited
                   ? "Previously Captured Image"
                   : "Captured Image"}
-              </Text>              
+              </Text>
 
               <TouchableOpacity onPress={() => setImageViewVisible(true)}>
                 <View
@@ -741,33 +835,51 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             </View>
           )}
 
-          {/* Camera Section - Only show if NOT visited and response is selected */}
-          {!isAlreadyVisited && selectedResponse && !capturedImage && (
+          {/* Camera Section - Show when response is selected but no image captured */}
+          {!isAlreadyVisited && selectedResponse && (
             <View style={tw`mb-4`}>
-              <Text
-                style={[
-                  tw`text-center text-lg font-semibold mb-2`,
-                  { color: "#7cc0d8" },
-                ]}
-              >
-                Capture Image
-              </Text>
+              {!capturedImage ? (
+                <>
+                  <TouchableOpacity
+                    onPress={() => setCameraVisible(true)}
+                    style={[
+                      tw`border-2 border-dashed rounded-lg p-6 items-center`,
+                      { borderColor: "#7cc0d8" },
+                    ]}
+                  >
+                    <Entypo name="camera" size={32} color="#7cc0d8" />
+                    <Text style={tw`text-center text-blue-600 text-sm mt-2`}>
+                      Tap to Capture Image
+                    </Text>
+                    <Text style={tw`text-center text-gray-500 text-xs mt-1`}>
+                      Required for submission
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {/* <Text
+                    style={[
+                      tw`text-center text-lg font-semibold mb-2`,
+                      { color: "#10b981" },
+                    ]}
+                  >
+                    ✓ Image Captured
+                  </Text> */}
 
-              <TouchableOpacity
-                onPress={() => setCameraVisible(true)}
-                style={[
-                  tw`border-2 border-dashed rounded-lg p-6 items-center`,
-                  { borderColor: "#7cc0d8" },
-                ]}
-              >
-                <Entypo name="camera" size={32} color="#7cc0d8" />
-                <Text style={tw`text-center text-blue-600 text-sm mt-2`}>
-                  Tap to Capture Image
-                </Text>
-                <Text style={tw`text-center text-gray-500 text-xs mt-1`}>
-                  Required for submission
-                </Text>
-              </TouchableOpacity>
+                  {/* <TouchableOpacity
+                    onPress={() => setCameraVisible(true)}
+                    style={[
+                      tw`border-2 border-dashed rounded-lg p-4 items-center`,
+                      { borderColor: "#10b981", backgroundColor: "#f0fdf4" },
+                    ]}
+                  >
+                    <Text style={tw`text-center text-green-600 text-sm mt-2`}>
+                      ✓ Image Ready - Tap to Recapture
+                    </Text>
+                  </TouchableOpacity> */}
+                </>
+              )}
             </View>
           )}
 
@@ -818,7 +930,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
               onPress={handleSave}
               disabled={!isSaveEnabled || saving}
               style={[
-                tw`rounded-full px-8 py-3 flex-1 ml-2`,
+                tw`rounded-full px-3 py-3 flex-1 ml-2`,
                 {
                   backgroundColor: isSaveEnabled ? "#10b981" : "#9ca3af",
                   opacity: isSaveEnabled ? 1 : 0.6,
@@ -827,18 +939,17 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             >
               {saving ? (
                 <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text style={tw`text-white text-lg font-bold text-center`}>
-                  {isSaveEnabled ? "Save Response" : "Complete Steps"}
-                </Text>
-              )}
+              ) : isSaveEnabled ? 
+                ( <Text style={tw`text-white text-lg font-bold text-center`}> Save </Text> ) : 
+                ( <Text style={tw`text-white text-base font-bold text-center`}> Complete Steps </Text> )
+              }
             </Pressable>
           ) : (
             <Pressable
               onPress={handleSave}
               disabled={!isSaveEnabled || saving}
               style={[
-                tw`rounded-full px-8 py-3 flex-1 ml-2`,
+                tw`rounded-full px-3 py-3 flex-1 ml-2`,
                 {
                   backgroundColor: isSaveEnabled ? "#f59e0b" : "#9ca3af",
                   opacity: isSaveEnabled ? 1 : 0.6,
@@ -847,17 +958,16 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             >
               {saving ? (
                 <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text style={tw`text-white text-lg font-bold text-center`}>
-                  {isSaveEnabled ? "Update Response" : "Complete Steps"}
-                </Text>
-              )}
+              ) : isSaveEnabled ? 
+                ( <Text style={tw`text-white text-lg font-bold text-center`}> Update </Text> ) : 
+                ( <Text style={tw`text-white text-base font-bold text-center`}> Complete Steps </Text> )
+              }
             </Pressable>
           )}
         </View>
 
         {/* Modals */}
-        <Modal
+        {/* <Modal
           animationType="slide"
           transparent={true}
           visible={modalVisible}
@@ -867,6 +977,20 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
             person={selectedPerson}
             onClose={() => setModalVisible(false)}
           />
+        </Modal> */}
+        {/* Modals */}
+        <Modal
+          animationType="slide"
+          transparent={false}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          {selectedPerson && (
+            <CustRelated
+              person={selectedPerson}
+              onClose={() => setModalVisible(false)}
+            />
+          )}
         </Modal>
 
         <Modal visible={cameraVisible} animationType="slide">
