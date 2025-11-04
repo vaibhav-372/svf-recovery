@@ -124,6 +124,7 @@ const CustRelated = ({ person, onClose }) => {
   const [showPTPreviousResponses, setShowPTPreviousResponses] = useState(false);
   const [selectedPT, setSelectedPT] = useState(null);
   const [loadingResponses, setLoadingResponses] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const flatListRef = useRef(null);
 
   const { token } = useAuth();
@@ -131,16 +132,35 @@ const CustRelated = ({ person, onClose }) => {
   const BASE_URL = `http://${SERVER_IP}:3000`;
 
   useEffect(() => {
-    // console.log("CustRelated received:", person);
+    console.log("CustRelated received person:", person);
 
-    if (person && person.allPTs) {
-      const records = person.allPTs;
+    if (!person) {
+      console.log("No person data provided");
+      setCustomerRecords([]);
+      return;
+    }
+
+    try {
+      const records = person.allPTs || [];
+      console.log(`Processing ${records.length} PT records`);
+
+      if (records.length === 0) {
+        console.log("No PT records found");
+        setCustomerRecords([]);
+        return;
+      }
+
       setCustomerRecords(records);
 
-      // Initialize individual responses state
+      // Initialize individual responses state with validation
       const initialResponses = {};
-      records.forEach((record) => {
-        const ptNo = record.pt_no;
+      records.forEach((record, index) => {
+        if (!record) {
+          console.warn(`Invalid record at index ${index}`);
+          return;
+        }
+
+        const ptNo = record.pt_no || `temp-${index}`;
         initialResponses[ptNo] = {
           response: "",
           description: "",
@@ -149,26 +169,31 @@ const CustRelated = ({ person, onClose }) => {
 
       setIndividualResponses(initialResponses);
 
-      // Load all data
-      loadAllPreviousResponses(records);
-      loadExistingResponses(records);
-      loadVisitedStatus(records);
-
-      console.log(`Loaded ${records.length} PT records`);
-    } else {
+      // Load all data only if we have valid records
+      if (records.length > 0 && records[0]) {
+        loadAllPreviousResponses(records);
+        loadExistingResponses(records);
+        loadVisitedStatus(records);
+      }
+    } catch (error) {
+      console.error("Error processing person data:", error);
       setCustomerRecords([]);
-      setIndividualResponses({});
-      setExistingResponses({});
-      setAllPreviousResponses({});
-      setVisitedData({});
     }
   }, [person]);
 
   // Load all previous responses for all PT numbers
   const loadAllPreviousResponses = async (records) => {
     try {
+      if (!person?.customerInfo?.customer_id) {
+        console.log("No customer ID available");
+        return;
+      }
+
       setLoadingResponses(true);
       const customerId = person.customerInfo.customer_id;
+
+      console.log("Loading previous responses for customer:", customerId);
+
       const response = await fetch(
         `${BASE_URL}/api/get-all-previous-responses/${customerId}`,
         {
@@ -180,32 +205,37 @@ const CustRelated = ({ person, onClose }) => {
         }
       );
 
-      if (response.ok) {
-        const result = await response.json();
-        // console.log("All previous responses API result:", result);
+      if (!response.ok) {
+        console.log(`API error: ${response.status} - ${response.statusText}`);
+        setAllPreviousResponses({});
+        return;
+      }
 
-        if (result.success && result.previousResponses) {
-          // Group responses by PT number
-          const responsesByPT = {};
-          result.previousResponses.forEach((response) => {
-            const ptNo = response.pt_no;
-            if (!responsesByPT[ptNo]) {
-              responsesByPT[ptNo] = [];
-            }
-            responsesByPT[ptNo].push(response);
-          });
+      const result = await response.json();
+      console.log("Previous responses API result:", result);
 
-          setAllPreviousResponses(responsesByPT);
-          // console.log("All previous responses grouped by PT:", responsesByPT);
-        } else {
-          console.log("No previous responses found");
-          setAllPreviousResponses({});
-        }
+      if (
+        result.success &&
+        result.previousResponses &&
+        Array.isArray(result.previousResponses)
+      ) {
+        const responsesByPT = {};
+        result.previousResponses.forEach((response, index) => {
+          if (!response) {
+            console.warn(`Invalid response at index ${index}`);
+            return;
+          }
+
+          const ptNo = response.pt_no || `unknown-${index}`;
+          if (!responsesByPT[ptNo]) {
+            responsesByPT[ptNo] = [];
+          }
+          responsesByPT[ptNo].push(response);
+        });
+
+        setAllPreviousResponses(responsesByPT);
       } else {
-        console.log(
-          "Failed to load all previous responses, status:",
-          response.status
-        );
+        console.log("No valid previous responses found");
         setAllPreviousResponses({});
       }
     } catch (error) {
@@ -218,6 +248,11 @@ const CustRelated = ({ person, onClose }) => {
 
   const loadVisitedStatus = async (records) => {
     try {
+      if (!person?.customerInfo?.customer_id) {
+        console.log("No customer ID available for visited status");
+        return;
+      }
+
       const customerId = person.customerInfo.customer_id;
       const response = await fetch(
         `${BASE_URL}/api/get-visited-status/${customerId}`,
@@ -232,13 +267,13 @@ const CustRelated = ({ person, onClose }) => {
 
       if (response.ok) {
         const result = await response.json();
-        // console.log("Visited status API response:", result);
         if (result.success && result.visitedData) {
           setVisitedData(result.visitedData);
         } else {
           setVisitedData({});
         }
       } else {
+        console.log("Failed to load visited status, status:", response.status);
         setVisitedData({});
       }
     } catch (error) {
@@ -249,6 +284,11 @@ const CustRelated = ({ person, onClose }) => {
 
   const loadExistingResponses = async (records) => {
     try {
+      if (!person?.customerInfo?.customer_id) {
+        console.log("No customer ID available for existing responses");
+        return;
+      }
+
       const customerId = person.customerInfo.customer_id;
       const response = await fetch(
         `${BASE_URL}/api/get-existing-responses/${customerId}`,
@@ -269,7 +309,11 @@ const CustRelated = ({ person, onClose }) => {
           // Pre-fill individual responses with existing data
           const updatedResponses = { ...individualResponses };
           records.forEach((record) => {
+            if (!record) return;
+            
             const ptNo = record.pt_no;
+            if (!ptNo) return;
+
             const existingResponse = result.existingResponses[ptNo];
             if (existingResponse) {
               updatedResponses[ptNo] = {
@@ -279,14 +323,12 @@ const CustRelated = ({ person, onClose }) => {
             }
           });
           setIndividualResponses(updatedResponses);
-
-          // console.log("Existing responses loaded:", result.existingResponses);
         } else {
           console.log("No existing responses found");
           setExistingResponses({});
         }
       } else {
-        console.log("Failed to load existing responses");
+        console.log("Failed to load existing responses, status:", response.status);
         setExistingResponses({});
       }
     } catch (error) {
@@ -296,7 +338,7 @@ const CustRelated = ({ person, onClose }) => {
   };
 
   const onViewRef = useRef(({ viewableItems }) => {
-    if (viewableItems.length > 0) {
+    if (viewableItems && viewableItems.length > 0) {
       setCurrentIndex(viewableItems[0].index);
     }
   });
@@ -304,12 +346,17 @@ const CustRelated = ({ person, onClose }) => {
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
 
   const openPreviousResponses = (ptNo) => {
+    if (!ptNo) {
+      console.log("No PT number provided for previous responses");
+      return;
+    }
     setSelectedPT(ptNo);
     setShowPTPreviousResponses(true);
   };
 
   // Helper function to get display value
   const getDisplayValue = (item, key) => {
+    if (!item || !key) return "0";
     const value = item[key] || "0";
     return value;
   };
@@ -337,6 +384,8 @@ const CustRelated = ({ person, onClose }) => {
 
   // Calculate interest amount for a loan record
   const calculateInterestAmount = (item) => {
+    if (!item) return "N/A";
+
     const principal = parseFloat(getDisplayValue(item, "loan_amount")) || 0;
     const rate = parseFloat(getDisplayValue(item, "interest_rate")) || 0;
     const startDate = getDisplayValue(item, "loan_created_date");
@@ -358,8 +407,6 @@ const CustRelated = ({ person, onClose }) => {
     } else {
       minimum_days_for_interest = 30;
     }
-
-    console.log("rate of interest:", rate);
 
     const result = calculateLoanInterest(
       principal,
@@ -383,8 +430,21 @@ const CustRelated = ({ person, onClose }) => {
     return "Customer";
   };
 
+  // Get customer ID safely
+  const getCustomerId = () => {
+    if (person && person.customerInfo) {
+      return person.customerInfo.customer_id;
+    }
+    return null;
+  };
+
   // Handle individual response change
   const handleIndividualResponseChange = (ptNo, field, value) => {
+    if (!ptNo) {
+      console.log("No PT number provided for response change");
+      return;
+    }
+
     setIndividualResponses((prev) => ({
       ...prev,
       [ptNo]: {
@@ -394,41 +454,16 @@ const CustRelated = ({ person, onClose }) => {
     }));
   };
 
-  // Helper function to get response summary by agent
-  const getResponseSummary = (responses) => {
-    const agentSummary = {};
-
-    responses.forEach((response) => {
-      const agentName =
-        response.agent_name || response.agent_full_name || "Unknown Agent";
-      if (!agentSummary[agentName]) {
-        agentSummary[agentName] = {
-          agent_name: agentName,
-          count: 0,
-        };
-      }
-      agentSummary[agentName].count++;
-    });
-
-    return Object.values(agentSummary);
-  };
-
   // Render previous responses section for each PT
   const renderPreviousResponsesSection = (ptNo) => {
+    if (!ptNo) return null;
+
     const ptResponses = allPreviousResponses[ptNo] || [];
     const hasPreviousResponses = ptResponses.length > 0;
 
-    // console.log(`📋 Checking PT ${ptNo}:`);
-    // console.log("  - Total responses found:", ptResponses.length);
-    // console.log("  - Responses:", ptResponses);
-
     if (!hasPreviousResponses) {
-      console.log(`  - No previous responses found for PT ${ptNo}`);
       return null;
     }
-
-    // Get the most recent response for the summary
-    const mostRecentResponse = ptResponses[0];
 
     return (
       <View
@@ -461,6 +496,11 @@ const CustRelated = ({ person, onClose }) => {
   };
 
   const saveIndividualResponse = async (ptNo) => {
+    if (!ptNo) {
+      Alert.alert("Error", "No PT number provided");
+      return;
+    }
+
     const responseData = individualResponses[ptNo];
 
     if (!responseData || !responseData.response) {
@@ -486,14 +526,19 @@ const CustRelated = ({ person, onClose }) => {
       setSaving(true);
 
       let imageUrl = null;
-      const customerId = person.customerInfo.customer_id;
+      const customerId = getCustomerId();
+
+      if (!customerId) {
+        Alert.alert("Error", "Customer ID not found");
+        return;
+      }
 
       const existingResponse = existingResponses[ptNo];
       if (existingResponse && existingResponse.image_url) {
         imageUrl = existingResponse.image_url;
       } else {
         const anyResponse = Object.values(existingResponses).find(
-          (resp) => resp.image_url
+          (resp) => resp && resp.image_url
         );
         if (anyResponse) {
           imageUrl = anyResponse.image_url;
@@ -571,17 +616,34 @@ const CustRelated = ({ person, onClose }) => {
 
   // Calculate loan balance
   const calculateBalance = (item) => {
+    if (!item) return "0.00";
+    
     const amount = parseFloat(getDisplayValue(item, "loan_amount")) || 0;
     const paid = parseFloat(getDisplayValue(item, "paid_amount")) || 0;
     return (amount - paid).toFixed(2);
   };
 
+  const handleImageError = () => {
+    console.log("Jewel image failed to load");
+    setImageError(true);
+  };
+
   const renderItem = ({ item, index }) => {
-    const ptNo = getDisplayValue(item, "pt_no");
+    // Safety check
+    if (!item) {
+      return (
+        <View style={[tw`p-4`, { width: width - 32 }]}>
+          <Text style={tw`text-red-500`}>Invalid record data</Text>
+        </View>
+      );
+    }
+
+    const ptNo = getDisplayValue(item, "pt_no") || `Record ${index + 1}`;
     const currentResponse = individualResponses[ptNo] || {
       response: "",
       description: "",
     };
+
     const existingResponse = existingResponses[ptNo];
     const ptResponses = allPreviousResponses[ptNo] || [];
     const hasPreviousResponses = ptResponses.length > 0;
@@ -847,19 +909,30 @@ const CustRelated = ({ person, onClose }) => {
             onPress={() => setImageViewVisible(true)}
             style={tw`items-center mt-3`}
           >
-            <Image
-              source={jewel}
-              style={[
-                tw`self-center`,
-                { width: 150, height: 150, resizeMode: "contain" },
-              ]}
-            />
+            {imageError ? (
+              <View style={[tw`justify-center items-center bg-gray-100`, { width: 150, height: 150 }]}>
+                <Ionicons name="image-outline" size={40} color="#9ca3af" />
+                <Text style={tw`text-gray-500 text-xs mt-2`}>Image not available</Text>
+              </View>
+            ) : (
+              <Image
+                source={jewel}
+                style={[
+                  tw`self-center`,
+                  { width: 150, height: 150, resizeMode: "contain" },
+                ]}
+                onError={handleImageError}
+              />
+            )}
             <Text style={tw`text-blue-500 text-sm mt-2`}>Ornament Image</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
     );
   };
+
+  const safeCustomerId = getCustomerId();
+  const safeCustomerName = getCustomerName();
 
   return (
     <View style={tw`flex-1 bg-white`}>
@@ -868,7 +941,7 @@ const CustRelated = ({ person, onClose }) => {
         <View style={tw`flex-row justify-between items-center`}>
           <View style={tw`flex-1`}>
             <Text style={tw`text-center text-xl font-bold text-gray-800`}>
-              {getCustomerName()}
+              {safeCustomerName}
             </Text>
             <Text style={tw`text-center text-sm text-gray-600 mt-1`}>
               {customerRecords.length} Loan Account(s)
@@ -885,10 +958,10 @@ const CustRelated = ({ person, onClose }) => {
         {/* Updated summary text */}
         <Text style={tw`text-center text-xs text-blue-600 mt-1`}>
           {Object.values(allPreviousResponses).reduce(
-            (total, responses) => total + responses.length,
+            (total, responses) => total + (responses ? responses.length : 0),
             0
           ) > 0
-            ? `${Object.values(allPreviousResponses).reduce((total, responses) => total + responses.length, 0)} total responses across all PTs`
+            ? `${Object.values(allPreviousResponses).reduce((total, responses) => total + (responses ? responses.length : 0), 0)} total responses across all PTs`
             : "No previous visit responses"}
         </Text>
 
@@ -901,6 +974,7 @@ const CustRelated = ({ person, onClose }) => {
           </View>
         )}
       </View>
+      
       {customerRecords.length > 0 ? (
         <>
           {/* Horizontal PT Records */}
@@ -909,7 +983,15 @@ const CustRelated = ({ person, onClose }) => {
             data={customerRecords}
             renderItem={renderItem}
             keyExtractor={(item, index) => {
-              const ptNo = getDisplayValue(item, "pt_no") || index;
+              if (!item) {
+                return `empty-${index}`;
+              }
+
+              const ptNo = getDisplayValue(item, "pt_no");
+              if (!ptNo || ptNo === "N/A") {
+                return `no-pt-${index}`;
+              }
+
               return `pt-${ptNo}-${index}`;
             }}
             horizontal
@@ -920,6 +1002,9 @@ const CustRelated = ({ person, onClose }) => {
             snapToInterval={width}
             decelerationRate="fast"
             style={tw`flex-1`}
+            initialNumToRender={3}
+            maxToRenderPerBatch={3}
+            windowSize={5}
           />
         </>
       ) : (
@@ -930,21 +1015,12 @@ const CustRelated = ({ person, onClose }) => {
           </Text>
         </View>
       )}
-      {/* Close Button */}
-      {/* <Pressable
-        onPress={onClose}
-        style={[
-          tw`absolute bottom-3 self-center px-6 py-3 rounded-full`,
-          { backgroundColor: "#7cc0d8" },
-        ]}
-      >
-        <Text style={tw`text-white text-lg font-bold`}>Close</Text>
-      </Pressable> */}
       
+      {/* Close Button */}
       <Pressable
         onPress={() => {
           console.log("Close button pressed in CustRelated");
-          onClose(); // This should call setModalVisible(false) from DetailedCust
+          onClose();
         }}
         style={[
           tw`absolute bottom-3 self-center px-6 py-3 rounded-full`,
@@ -959,27 +1035,34 @@ const CustRelated = ({ person, onClose }) => {
         imageIndex={0}
         visible={imageViewVisible}
         onRequestClose={() => setImageViewVisible(false)}
+        onImageLoadError={() => setImageError(true)}
       />
-      <PreviousResponsesList
-        visible={showPreviousResponses}
-        onClose={() => setShowPreviousResponses(false)}
-        customerId={person?.customerInfo?.customer_id}
-        token={token}
-        BASE_URL={BASE_URL}
-        customerName={getCustomerName()}
-      />
-      <PTPreviousResponses
-        visible={showPTPreviousResponses}
-        onClose={() => {
-          setShowPTPreviousResponses(false);
-          setSelectedPT(null);
-        }}
-        customerId={person?.customerInfo?.customer_id}
-        ptNo={selectedPT}
-        token={token}
-        BASE_URL={BASE_URL}
-        customerName={getCustomerName()}
-      />
+      
+      {/* Previous Responses Modals */}
+      {safeCustomerId && (
+        <>
+          <PreviousResponsesList
+            visible={showPreviousResponses}
+            onClose={() => setShowPreviousResponses(false)}
+            customerId={safeCustomerId}
+            token={token}
+            BASE_URL={BASE_URL}
+            customerName={safeCustomerName}
+          />
+          <PTPreviousResponses
+            visible={showPTPreviousResponses}
+            onClose={() => {
+              setShowPTPreviousResponses(false);
+              setSelectedPT(null);
+            }}
+            customerId={safeCustomerId}
+            ptNo={selectedPT}
+            token={token}
+            BASE_URL={BASE_URL}
+            customerName={safeCustomerName}
+          />
+        </>
+      )}
     </View>
   );
 };

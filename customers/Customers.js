@@ -231,7 +231,7 @@ const Customers = () => {
   }, [route.params, dataLoaded, fetchCustomers]);
 
   const handlePress = (person) => {
-    console.log("👉 Customer selected:", person.name);
+    // console.log("👉 Customer selected:", person.name);
     setSelectedPerson(person);
     setModalVisible(true);
   };

@@ -8,8 +8,8 @@ import {
   Image,
   ScrollView,
   Dimensions,
-  StyleSheet,
-  Pressable,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import tw from 'tailwind-react-native-classnames';
@@ -28,15 +28,28 @@ const PreviousResponsesList = ({
   const [loading, setLoading] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     if (visible && customerId) {
       loadPreviousResponses();
+    } else {
+      // Reset states when modal closes
+      setPreviousResponses([]);
+      setSelectedResponse(null);
+      setImageError(false);
     }
   }, [visible, customerId]);
 
   const loadPreviousResponses = async () => {
     try {
+      // Validate inputs
+      if (!customerId || !token || !BASE_URL) {
+        console.error('Missing required parameters:', { customerId, token: !!token, BASE_URL });
+        Alert.alert('Error', 'Missing required information');
+        return;
+      }
+
       setLoading(true);
       const response = await fetch(
         `${BASE_URL}/api/get-all-previous-responses/${customerId}`,
@@ -49,14 +62,22 @@ const PreviousResponsesList = ({
         }
       );
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setPreviousResponses(result.previousResponses || []);
-        }
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Safely handle API response
+      if (result && result.success) {
+        setPreviousResponses(Array.isArray(result.previousResponses) ? result.previousResponses : []);
+      } else {
+        setPreviousResponses([]);
       }
     } catch (error) {
       console.error('Error loading previous responses:', error);
+      Alert.alert('Error', 'Failed to load previous visits');
+      setPreviousResponses([]);
     } finally {
       setLoading(false);
     }
@@ -66,7 +87,7 @@ const PreviousResponsesList = ({
     if (!dateString) return 'Unknown date';
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
+      return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -79,49 +100,88 @@ const PreviousResponsesList = ({
   };
 
   const handleResponsePress = (response) => {
+    if (!response) return;
+    
     setSelectedResponse(response);
     setDetailModalVisible(true);
+    setImageError(false);
   };
 
-  const renderResponseItem = ({ item, index }) => (
-    <TouchableOpacity
-      style={[
-        tw`p-4 border-b border-gray-200`,
-        item.is_current_agent && tw`bg-blue-50`
-      ]}
-      onPress={() => handleResponsePress(item)}
-    >
-      <View style={tw`flex-row justify-between items-start mb-2`}>
-        <View style={tw`flex-1`}>
-          <Text style={tw`font-bold text-gray-800`}>
-            {item.agent_name || item.agent_full_name || 'Unknown Agent'}
-            {item.is_current_agent && (
-              <Text style={tw`text-blue-600 text-xs`}> (You)</Text>
+  const getSafeImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+    
+    try {
+      // Handle both absolute and relative URLs
+      if (imageUrl.startsWith('http')) {
+        return imageUrl;
+      } else if (imageUrl.startsWith('/')) {
+        return `${BASE_URL}${imageUrl}`;
+      } else {
+        return `${BASE_URL}/${imageUrl}`;
+      }
+    } catch (error) {
+      console.error('Error constructing image URL:', error);
+      return null;
+    }
+  };
+
+  const handleImageError = () => {
+    console.log('Image failed to load');
+    setImageError(true);
+  };
+
+  const renderResponseItem = ({ item, index }) => {
+    // Safety check for null item
+    if (!item) {
+      return (
+        <View style={tw`p-4 border-b border-gray-200 bg-red-50`}>
+          <Text style={tw`text-red-500 text-sm`}>Invalid response data</Text>
+        </View>
+      );
+    }
+
+    const safeItem = item || {};
+    
+    return (
+      <TouchableOpacity
+        style={[
+          tw`p-4 border-b border-gray-200`,
+          safeItem.is_current_agent && tw`bg-blue-50`
+        ]}
+        onPress={() => handleResponsePress(safeItem)}
+      >
+        <View style={tw`flex-row justify-between items-start mb-2`}>
+          <View style={tw`flex-1`}>
+            <Text style={tw`font-bold text-gray-800`}>
+              {safeItem.agent_name || safeItem.agent_full_name || 'Unknown Agent'}
+              {safeItem.is_current_agent && (
+                <Text style={tw`text-blue-600 text-xs`}> (You)</Text>
+              )}
+            </Text>
+            <Text style={tw`text-sm text-gray-600 mt-1`}>
+              PT: {safeItem.pt_no || 'N/A'}
+            </Text>
+            <Text style={[
+              tw`text-sm font-medium mt-1`,
+              safeItem.response_text === 'Others' ? tw`text-purple-600` : tw`text-green-600`
+            ]}>
+              {safeItem.response_text === 'Others' 
+                ? (safeItem.response_description || 'Other') 
+                : (safeItem.response_text || 'No response')}
+            </Text>
+          </View>
+          <View style={tw`items-end`}>
+            <Text style={tw`text-xs text-gray-500`}>
+              {formatDate(safeItem.response_timestamp)}
+            </Text>
+            {safeItem.image_url && (
+              <Ionicons name="camera" size={16} color="#6b7280" style={tw`mt-1`} />
             )}
-          </Text>
-          <Text style={tw`text-sm text-gray-600 mt-1`}>
-            PT: {item.pt_no || 'N/A'}
-          </Text>
-          <Text style={[
-            tw`text-sm font-medium mt-1`,
-            item.response_text === 'Others' ? tw`text-purple-600` : tw`text-green-600`
-          ]}>
-            {item.response_text === 'Others' 
-              ? (item.response_description || 'Other') 
-              : item.response_text}
-          </Text>
+          </View>
         </View>
-        <View style={tw`items-end`}>
-          <Text style={tw`text-xs text-gray-500`}>
-            {formatDate(item.response_timestamp)}
-          </Text>
-          {item.image_url && (
-            <Ionicons name="camera" size={16} color="#6b7280" style={tw`mt-1`} />
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderDetailModal = () => (
     <Modal
@@ -141,7 +201,7 @@ const PreviousResponsesList = ({
           </TouchableOpacity>
         </View>
 
-        {selectedResponse && (
+        {selectedResponse ? (
           <ScrollView style={tw`flex-1 p-4`}>
             {/* Agent Info */}
             <View style={tw`bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4`}>
@@ -169,7 +229,7 @@ const PreviousResponsesList = ({
               <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Response:</Text>
               <View style={tw`bg-gray-50 border border-gray-200 rounded-lg p-3`}>
                 <Text style={tw`text-gray-800 font-medium`}>
-                  {selectedResponse.response_text}
+                  {selectedResponse.response_text || 'No response recorded'}
                 </Text>
               </View>
             </View>
@@ -190,14 +250,24 @@ const PreviousResponsesList = ({
             {selectedResponse.image_url && (
               <View style={tw`mb-4`}>
                 <Text style={tw`text-sm font-semibold text-gray-700 mb-2`}>Visit Image:</Text>
-                <Image
-                  source={{ uri: `${BASE_URL}${selectedResponse.image_url}` }}
-                  style={[
-                    tw`rounded-lg self-center`,
-                    { width: width - 32, height: 300, resizeMode: 'cover' }
-                  ]}
-                  defaultSource={require('../assets/jewel.webp')}
-                />
+                <View style={tw`border border-gray-200 rounded-lg overflow-hidden`}>
+                  {!imageError ? (
+                    <Image
+                      source={{ uri: getSafeImageUrl(selectedResponse.image_url) }}
+                      style={{
+                        width: width - 32,
+                        height: 300,
+                        resizeMode: 'cover'
+                      }}
+                      onError={handleImageError}
+                    />
+                  ) : (
+                    <View style={[tw`justify-center items-center bg-gray-100`, { width: width - 32, height: 300 }]}>
+                      <Ionicons name="image-outline" size={50} color="#9ca3af" />
+                      <Text style={tw`text-gray-500 mt-2`}>Image not available</Text>
+                    </View>
+                  )}
+                </View>
               </View>
             )}
 
@@ -218,20 +288,27 @@ const PreviousResponsesList = ({
               </Text>
             </View>
           </ScrollView>
+        ) : (
+          <View style={tw`flex-1 justify-center items-center`}>
+            <Text style={tw`text-gray-500`}>No response data available</Text>
+          </View>
         )}
 
         {/* Close Button */}
         <View style={tw`p-4 border-t border-gray-200`}>
-          <Pressable
+          <TouchableOpacity
             onPress={() => setDetailModalVisible(false)}
             style={[tw`rounded-full px-6 py-3`, { backgroundColor: '#7cc0d8' }]}
           >
             <Text style={tw`text-white text-lg font-bold text-center`}>Close</Text>
-          </Pressable>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
+
+  // Safety check for main modal
+  if (!visible) return null;
 
   return (
     <Modal
@@ -242,9 +319,11 @@ const PreviousResponsesList = ({
       <View style={tw`flex-1 bg-white`}>
         {/* Header */}
         <View style={tw`px-4 py-3 border-b border-gray-200 flex-row justify-between items-center`}>
-          <View>
+          <View style={tw`flex-1`}>
             <Text style={tw`text-lg font-bold text-gray-800`}>Previous Visits</Text>
-            <Text style={tw`text-sm text-gray-600`}>{customerName}</Text>
+            <Text style={tw`text-sm text-gray-600`} numberOfLines={1}>
+              {customerName || 'Customer'}
+            </Text>
           </View>
           <TouchableOpacity
             onPress={onClose}
@@ -264,14 +343,22 @@ const PreviousResponsesList = ({
         {/* List */}
         {loading ? (
           <View style={tw`flex-1 justify-center items-center`}>
-            <Text style={tw`text-gray-600`}>Loading previous visits...</Text>
+            <ActivityIndicator size="large" color="#7cc0d8" />
+            <Text style={tw`text-gray-600 mt-2`}>Loading previous visits...</Text>
           </View>
         ) : previousResponses.length > 0 ? (
           <FlatList
             data={previousResponses}
             renderItem={renderResponseItem}
-            keyExtractor={(item, index) => `response-${item.entry_id}-${index}`}
+            keyExtractor={(item, index) => {
+              // Safe key extraction
+              if (!item) return `null-item-${index}`;
+              return `response-${item.entry_id || item.response_id || index}-${index}`;
+            }}
             showsVerticalScrollIndicator={false}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
           />
         ) : (
           <View style={tw`flex-1 justify-center items-center p-4`}>

@@ -40,7 +40,8 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
   const [existingResponse, setExistingResponse] = useState(null);
   const [isAlreadyVisited, setIsAlreadyVisited] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1); // 1: Check Status, 2: Capture Image, 3: Save Response
+  const [currentStep, setCurrentStep] = useState(1);
+  const [imageError, setImageError] = useState(false);
 
   const { token } = useAuth();
   const SERVER_IP = "192.168.65.11";
@@ -80,142 +81,119 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     setIsAlreadyVisited(false);
     setCheckingExisting(false);
     setCurrentStep(1);
+    setImageError(false);
   };
 
-// STEP 1: Check if customer is already visited
-const checkCustomerStatus = async () => {
-  try {
-    const customerId = person.customer_id || person.entry_id;
+  // STEP 1: Check if customer is already visited
+  const checkCustomerStatus = async () => {
+    try {
+      const customerId = person.customer_id || person.entry_id;
 
-    if (!customerId) {
-      console.log("No customer ID found");
-      Alert.alert("Error", "Customer ID not found");
-      return;
-    }
-
-    setCheckingExisting(true);
-    console.log("STEP 1: Checking customer status for:", customerId);
-
-    // Use the same API endpoint as CustRelated
-    const response = await fetch(
-      `${BASE_URL}/api/get-existing-responses/${customerId}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      if (!customerId) {
+        console.log("No customer ID found");
+        Alert.alert("Error", "Customer ID not found");
+        return;
       }
-    );
 
-    if (response.ok) {
-      const result = await response.json();
-      console.log("FULL API RESPONSE for existing responses:", JSON.stringify(result, null, 2));
+      setCheckingExisting(true);
 
-      if (result.success) {
-        // Check if there are any existing responses
-        const existingResponses = result.existingResponses || {};
-        const hasExistingResponses = Object.keys(existingResponses).length > 0;
-        
-        if (hasExistingResponses) {
-          // Customer already visited - show existing data
-          setIsAlreadyVisited(true);
-          
-          // Get the first existing response (since DetailedCust shows combined response)
-          const firstPtNo = Object.keys(existingResponses)[0];
-          const existingResponse = existingResponses[firstPtNo];
-          
-          setExistingResponse(existingResponse);
+      const response = await fetch(
+        `${BASE_URL}/api/get-existing-responses/${customerId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-          console.log("Using existing response data:", existingResponse);
+      if (response.ok) {
+        const result = await response.json();
 
-          // Pre-fill the form with existing data
-          if (existingResponse) {
-            // Map response text to picker value
-            const responseText = 
-              existingResponse.response_type || 
-              existingResponse.response_text || 
-              "";
+        if (result.success) {
+          const existingResponses = result.existingResponses || {};
+          const hasExistingResponses =
+            Object.keys(existingResponses).length > 0;
 
-            console.log("Extracted response text:", responseText);
+          if (hasExistingResponses) {
+            setIsAlreadyVisited(true);
 
-            // Ensure the response text matches one of the picker options
-            const validResponses = [
-              "Call not lifting",
-              "1111111111111111",
-              "Customer not at home",
-              "Requested time",
-              "Others",
-            ];
+            const firstPtNo = Object.keys(existingResponses)[0];
+            const existingResponse = existingResponses[firstPtNo];
 
-            if (validResponses.includes(responseText)) {
-              setSelectedResponse(responseText);
-              console.log("Set selected response to:", responseText);
-            } else if (responseText) {
-              // If it's a custom response, set to "Others"
-              setSelectedResponse("Others");
-              console.log("Set selected response to Others for:", responseText);
-            } else {
-              setSelectedResponse("");
-              console.log("No valid response text found");
+            setExistingResponse(existingResponse);
+
+            if (existingResponse) {
+              const responseText =
+                existingResponse.response_type ||
+                existingResponse.response_text ||
+                "";
+
+              const validResponses = [
+                "Call not lifting",
+                "1111111111111111",
+                "Customer not at home",
+                "Requested time",
+                "Others",
+              ];
+
+              if (validResponses.includes(responseText)) {
+                setSelectedResponse(responseText);
+              } else if (responseText) {
+                setSelectedResponse("Others");
+              } else {
+                setSelectedResponse("");
+              }
+
+              const description = existingResponse.response_description || "";
+              setResponseDescription(description);
+
+              const imageUrl = existingResponse.image_url;
+
+              if (imageUrl) {
+                const fullImageUrl = imageUrl.startsWith("http")
+                  ? imageUrl
+                  : `${BASE_URL}${imageUrl}`;
+
+                setCapturedImage({
+                  imageUri: fullImageUrl,
+                  location:
+                    existingResponse.latitude && existingResponse.longitude
+                      ? {
+                          latitude: existingResponse.latitude,
+                          longitude: existingResponse.longitude,
+                        }
+                      : null,
+                });
+                setUploadedImageUrl(imageUrl);
+              } else {
+                setCapturedImage(null);
+                setUploadedImageUrl(null);
+                console.log("No image URL found");
+              }
             }
-
-            // Set description
-            const description = existingResponse.response_description || "";
-            setResponseDescription(description);
-            console.log("Set response description to:", description);
-
-            // Set captured image data if available
-            const imageUrl = existingResponse.image_url;
-
-            if (imageUrl) {
-              const fullImageUrl = imageUrl.startsWith("http")
-                ? imageUrl
-                : `${BASE_URL}${imageUrl}`;
-
-              setCapturedImage({
-                imageUri: fullImageUrl,
-                location:
-                  existingResponse.latitude && existingResponse.longitude
-                    ? {
-                        latitude: existingResponse.latitude,
-                        longitude: existingResponse.longitude,
-                      }
-                    : null,
-              });
-              setUploadedImageUrl(imageUrl);
-              console.log("Set captured image with URL:", imageUrl);
-            } else {
-              // Ensure capturedImage is null if no existing image
-              setCapturedImage(null);
-              setUploadedImageUrl(null);
-              console.log("No image URL found");
-            }
+            setCurrentStep(1);
+          } else {
+            setIsAlreadyVisited(false);
+            setCurrentStep(2);
           }
-          setCurrentStep(1);
         } else {
-          // Customer not visited - proceed to step 2
-          setIsAlreadyVisited(false);
-          setCurrentStep(2);
-          console.log("Customer not visited, proceeding to step 2");
+          console.log("API returned success: false");
+          Alert.alert("Error", "Failed to check customer status");
         }
       } else {
-        console.log("API returned success: false");
+        const errorText = await response.text();
+        console.log("Error response:", errorText);
         Alert.alert("Error", "Failed to check customer status");
       }
-    } else {
-      console.log("Response not OK, status:", response.status);
-      const errorText = await response.text();
-      console.log("Error response:", errorText);
+    } catch (error) {
+      console.error("Error checking customer status:", error);
       Alert.alert("Error", "Failed to check customer status");
+    } finally {
+      setCheckingExisting(false);
     }
-  } catch (error) {
-    console.error("Error checking customer status:", error);
-    Alert.alert("Error", "Failed to check customer status");
-  } finally {
-    setCheckingExisting(false);
-  }
-};
+  };
 
   const fetchAllCustomerPTs = async (customerId) => {
     try {
@@ -254,7 +232,6 @@ const checkCustomerStatus = async () => {
       const data = await response.json();
 
       if (data.success) {
-        console.log(`Fetched ${data.loans.length} PT records for customer`);
         return data.loans;
       } else {
         throw new Error(data.message || "Failed to fetch customer loans");
@@ -272,94 +249,9 @@ const checkCustomerStatus = async () => {
     }
   };
 
-  useEffect(() => {
-    if (person) {
-      console.log(
-        "DetailedCust opened for person:",
-        person.customer_id,
-        person.customer_name
-      );
-      resetForm();
-      checkCustomerStatus();
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.spring(translateYAnim, {
-          toValue: 0,
-          friction: 6,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-
-    // Cleanup function
-    return () => {
-      setModalVisible(false);
-      setSelectedPerson(null);
-    };
-  }, [person]);
-
-  const handleViewDetails = async () => {
-    if (loadingRelated) return;
-
-    try {
-      const customerId = person.customer_id || person.entry_id;
-
-      if (!customerId) {
-        Alert.alert("Error", "Customer ID not found");
-        return;
-      }
-
-      console.log("Fetching all PTs for customer:", customerId);
-
-      setLoadingRelated(true);
-      const allPTs = await fetchAllCustomerPTs(customerId);
-
-      const customerData = {
-        customerInfo: person,
-        allPTs: allPTs.length > 0 ? allPTs : [person],
-      };
-
-      console.log("Setting selected person and opening modal");
-
-      setSelectedPerson(customerData);
-
-      // Small delay to ensure state is set before opening modal
-      setTimeout(() => {
-        setModalVisible(true);
-      }, 100);
-    } catch (error) {
-      console.error("Error in handleViewDetails:", error);
-      // setSelectedPerson({
-      //   customerInfo: person,
-      //   allPTs: [person],
-      // });
-      // setModalVisible(true);
-
-      const customerData = {
-        customerInfo: person,
-        allPTs: [person],
-      };
-      setSelectedPerson(customerData);
-      setTimeout(() => {
-        setModalVisible(true);
-      }, 100);
-    } finally {
-      setLoadingRelated(false);
-    }
-  };
-
   // STEP 2: Handle response selection
   const handleResponseSelect = (value) => {
     setSelectedResponse(value);
-    // if (value !== "Others") {
-    //   setResponseDescription(value); // Auto-fill description with selected response
-    // } else {
-    //   setResponseDescription(""); // Clear for Others
-    // }f
   };
 
   // STEP 3: Handle image capture
@@ -372,16 +264,61 @@ const checkCustomerStatus = async () => {
       return;
     }
 
-    console.log("STEP 3: Image captured:", data);
+    console.log("Image captured successfully:", data);
+
+    // Validate the captured data
+    if (!data || !data.imageUri) {
+      console.error("Invalid image data received:", data);
+      Alert.alert("Error", "Failed to capture image. Please try again.");
+      return;
+    }
+
+    // Set the captured image
     setCapturedImage(data);
     setCameraVisible(false);
-    setCurrentStep(3); // Move to save step
+    setImageError(false);
+
+    console.log("Camera closed, image set successfully");
+  };
+
+  // Safe image URI getter
+  const getSafeImageUri = () => {
+    if (!capturedImage || !capturedImage.imageUri) {
+      return null;
+    }
+
+    try {
+      // Validate the URI
+      const uri = capturedImage.imageUri;
+      if (typeof uri === "string" && uri.length > 0) {
+        return uri;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error getting safe image URI:", error);
+      return null;
+    }
+  };
+
+  // Handle image viewing safely
+  const handleImageView = () => {
+    const safeUri = getSafeImageUri();
+    if (safeUri) {
+      setImageViewVisible(true);
+    } else {
+      Alert.alert("Error", "No valid image to display");
+    }
   };
 
   // Upload image to server
   const uploadImageToServer = async (imageUri) => {
     try {
       console.log("Uploading image:", imageUri);
+
+      // Validate image URI
+      if (!imageUri || typeof imageUri !== "string") {
+        throw new Error("Invalid image URI");
+      }
 
       const formData = new FormData();
       formData.append("image", {
@@ -420,7 +357,6 @@ const checkCustomerStatus = async () => {
 
   // Save response to database
   const saveResponseToDatabase = async () => {
-    // STRICT VALIDATION: Check if all required fields are present
     if (!selectedResponse) {
       Alert.alert(
         "Response Required",
@@ -434,7 +370,6 @@ const checkCustomerStatus = async () => {
       return;
     }
 
-    // NEW: Only require description if response is "Others"
     if (selectedResponse === "Others" && !responseDescription.trim()) {
       Alert.alert(
         "Description Required",
@@ -446,7 +381,6 @@ const checkCustomerStatus = async () => {
     try {
       setSaving(true);
 
-      // Upload the image first (only if it's a new image)
       let imageUrl = uploadedImageUrl;
       if (capturedImage && !capturedImage.imageUri.startsWith("http")) {
         try {
@@ -464,31 +398,23 @@ const checkCustomerStatus = async () => {
         }
       }
 
-      // NEW LOGIC: Determine what to store in response_description
       let finalResponseDescription = responseDescription;
 
       if (selectedResponse === "Others") {
-        // For "Others", use the custom description
         finalResponseDescription = responseDescription;
       } else {
-        // For standard responses, use empty string if no description provided
-        // or use the custom description if provided
         finalResponseDescription = responseDescription || "";
       }
 
-      // Prepare response data
       const responseData = {
         customer_id: person.customer_id || person.entry_id,
         response_type: selectedResponse,
-        response_description: finalResponseDescription, // Use the new logic
+        response_description: finalResponseDescription,
         image_url: imageUrl,
         latitude: capturedImage?.location?.latitude || null,
         longitude: capturedImage?.location?.longitude || null,
       };
 
-      console.log("Saving/Updating response with data:", responseData);
-
-      // Use the same endpoint for both create and update
       const response = await fetch(`${BASE_URL}/api/save-recovery-response`, {
         method: "POST",
         headers: {
@@ -509,7 +435,6 @@ const checkCustomerStatus = async () => {
       if (result.success) {
         console.log("Response saved/updated successfully:", result);
 
-        // Update local state to reflect the changes
         setIsAlreadyVisited(true);
         setExistingResponse({
           response_text: selectedResponse,
@@ -519,7 +444,6 @@ const checkCustomerStatus = async () => {
           longitude: capturedImage?.location?.longitude,
         });
 
-        // Call the callback to notify parent component
         if (onResponseSaved) {
           onResponseSaved(person.customer_id || person.entry_id);
         }
@@ -545,15 +469,53 @@ const checkCustomerStatus = async () => {
     }
   };
 
-  // Update isSaveEnabled logic
+  const handleViewDetails = async () => {
+    if (loadingRelated) return;
+
+    try {
+      const customerId = person.customer_id || person.entry_id;
+
+      if (!customerId) {
+        Alert.alert("Error", "Customer ID not found");
+        return;
+      }
+
+      console.log("Fetching all PTs for customer:", customerId);
+
+      setLoadingRelated(true);
+      const allPTs = await fetchAllCustomerPTs(customerId);
+
+      const customerData = {
+        customerInfo: person,
+        allPTs: allPTs.length > 0 ? allPTs : [person],
+      };
+
+      setSelectedPerson(customerData);
+
+      setTimeout(() => {
+        setModalVisible(true);
+      }, 100);
+    } catch (error) {
+      console.error("Error in handleViewDetails:", error);
+      const customerData = {
+        customerInfo: person,
+        allPTs: [person],
+      };
+      setSelectedPerson(customerData);
+      setTimeout(() => {
+        setModalVisible(true);
+      }, 100);
+    } finally {
+      setLoadingRelated(false);
+    }
+  };
+
   const isSaveEnabled =
     selectedResponse &&
     capturedImage &&
     (selectedResponse !== "Others" || responseDescription.trim());
 
-  // Handle save button press
   const handleSave = () => {
-    // Final validation before saving
     if (!selectedResponse || !capturedImage) {
       Alert.alert(
         "Incomplete Data",
@@ -577,13 +539,15 @@ const checkCustomerStatus = async () => {
     );
   };
 
-  // Check if save button should be enabled
-  // const isSaveEnabled =
-  //   selectedResponse &&
-  //   capturedImage &&
-  //   (selectedResponse !== "Others" || responseDescription.trim());
+  const handleImageError = () => {
+    console.log("Image failed to load");
+    setImageError(true);
+  };
 
   if (!person) return null;
+
+  const safeImageUri = getSafeImageUri();
+  const imageViewImages = safeImageUri ? [{ uri: safeImageUri }] : [];
 
   return (
     <Animated.View
@@ -606,7 +570,6 @@ const checkCustomerStatus = async () => {
       >
         {/* Header with Icons */}
         <View style={tw`flex flex-row justify-between items-center mb-4`}>
-          {/* View All Loans Button */}
           <TouchableOpacity
             onPress={handleViewDetails}
             style={tw`flex-row items-center`}
@@ -626,22 +589,6 @@ const checkCustomerStatus = async () => {
               {loadingRelated ? "Loading..." : "View All Loans"}
             </Text>
           </TouchableOpacity>
-
-
-          {/* <TouchableOpacity
-            onPress={() => (isAlreadyVisited ? null : setCameraVisible(true))}
-            disabled={isAlreadyVisited || checkingExisting}
-          >
-            {checkingExisting ? (
-              <ActivityIndicator size="small" color="#9ca3af" />
-            ) : (
-              <Entypo
-                name="camera"
-                size={24}
-                color={isAlreadyVisited ? "#9ca3af" : "#7cc0d8"}
-              />
-            )}
-          </TouchableOpacity> */}
         </View>
 
         <ScrollView style={tw`px-2`} showsVerticalScrollIndicator={false}>
@@ -654,7 +601,7 @@ const checkCustomerStatus = async () => {
             {person.name}
           </Text>
 
-          {/* Personal Information - Always Show */}
+          {/* Personal Information */}
           <View
             style={[
               tw`border-2 rounded-lg p-4 mb-4`,
@@ -695,24 +642,8 @@ const checkCustomerStatus = async () => {
               </Text>
             </View>
           )}
-          {/* 
-          {isAlreadyVisited && !checkingExisting && (
-            <View
-              style={tw`bg-green-50 border border-green-200 rounded-lg p-4 mb-4`}
-            >
-              <View style={tw`flex-row items-center justify-center`}>
-                <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                <Text style={tw`text-green-800 text-sm font-semibold ml-2`}>
-                  ✓ Already Visited
-                </Text>
-              </View>
-              <Text style={tw`text-green-600 text-xs text-center mt-1`}>
-                This customer has already been visited. You can update the response.
-              </Text>
-            </View>
-          )} */}
 
-          {/* Customer Response Section - Always show but allow editing */}
+          {/* Customer Response Section */}
           <View
             style={[
               tw`border-2 rounded-lg p-4 mb-4`,
@@ -735,10 +666,7 @@ const checkCustomerStatus = async () => {
 
             <View style={tw`mb-3`}>
               <View
-                style={[
-                  tw`border rounded-lg`,
-                  tw`border-gray-300 bg-white`, 
-                ]}
+                style={[tw`border rounded-lg`, tw`border-gray-300 bg-white`]}
               >
                 <RNPickerSelect
                   onValueChange={handleResponseSelect}
@@ -771,7 +699,6 @@ const checkCustomerStatus = async () => {
               </View>
             </View>
 
-            {/* Response Description - Always editable */}
             <TextInput
               value={responseDescription}
               onChangeText={setResponseDescription}
@@ -782,7 +709,7 @@ const checkCustomerStatus = async () => {
             />
           </View>
 
-          {/* Captured Image Section - Show for both visited and non-visited */}
+          {/* Captured Image Section */}
           {(capturedImage ||
             (isAlreadyVisited && existingResponse?.image_url)) && (
             <View style={tw`mb-4`}>
@@ -797,7 +724,7 @@ const checkCustomerStatus = async () => {
                   : "Captured Image"}
               </Text>
 
-              <TouchableOpacity onPress={() => setImageViewVisible(true)}>
+              <TouchableOpacity onPress={handleImageView}>
                 <View
                   style={[
                     tw`border-2 border-dashed rounded-lg p-4 items-center`,
@@ -830,60 +757,40 @@ const checkCustomerStatus = async () => {
                       server
                     </Text>
                   )}
+                  {imageError && (
+                    <Text style={tw`text-center text-red-500 text-xs mt-1`}>
+                      Failed to load image
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Camera Section - Show when response is selected but no image captured */}
+          {/* Camera Section */}
           {!isAlreadyVisited && selectedResponse && (
             <View style={tw`mb-4`}>
               {!capturedImage ? (
-                <>
-                  <TouchableOpacity
-                    onPress={() => setCameraVisible(true)}
-                    style={[
-                      tw`border-2 border-dashed rounded-lg p-6 items-center`,
-                      { borderColor: "#7cc0d8" },
-                    ]}
-                  >
-                    <Entypo name="camera" size={32} color="#7cc0d8" />
-                    <Text style={tw`text-center text-blue-600 text-sm mt-2`}>
-                      Tap to Capture Image
-                    </Text>
-                    <Text style={tw`text-center text-gray-500 text-xs mt-1`}>
-                      Required for submission
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  {/* <Text
-                    style={[
-                      tw`text-center text-lg font-semibold mb-2`,
-                      { color: "#10b981" },
-                    ]}
-                  >
-                    ✓ Image Captured
-                  </Text> */}
-
-                  {/* <TouchableOpacity
-                    onPress={() => setCameraVisible(true)}
-                    style={[
-                      tw`border-2 border-dashed rounded-lg p-4 items-center`,
-                      { borderColor: "#10b981", backgroundColor: "#f0fdf4" },
-                    ]}
-                  >
-                    <Text style={tw`text-center text-green-600 text-sm mt-2`}>
-                      ✓ Image Ready - Tap to Recapture
-                    </Text>
-                  </TouchableOpacity> */}
-                </>
-              )}
+                <TouchableOpacity
+                  onPress={() => setCameraVisible(true)}
+                  style={[
+                    tw`border-2 border-dashed rounded-lg p-6 items-center`,
+                    { borderColor: "#7cc0d8" },
+                  ]}
+                >
+                  <Entypo name="camera" size={32} color="#7cc0d8" />
+                  <Text style={tw`text-center text-blue-600 text-sm mt-2`}>
+                    Tap to Capture Image
+                  </Text>
+                  <Text style={tw`text-center text-gray-500 text-xs mt-1`}>
+                    Required for submission
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           )}
 
-          {/* Location - Show for both visited and non-visited */}
+          {/* Location */}
           {capturedImage?.location && (
             <View style={tw`mb-4`}>
               <Text
@@ -903,7 +810,6 @@ const checkCustomerStatus = async () => {
             </View>
           )}
 
-          {/* Spacer for bottom buttons */}
           <View style={tw`mb-32`} />
         </ScrollView>
 
@@ -911,7 +817,6 @@ const checkCustomerStatus = async () => {
         <View
           style={tw`absolute bottom-5 left-4 right-4 flex-row justify-between`}
         >
-          {/* Close Button */}
           <Pressable
             onPress={onClose}
             style={[
@@ -924,7 +829,6 @@ const checkCustomerStatus = async () => {
             </Text>
           </Pressable>
 
-          {/* Save/Update Button - Show for both visited and non-visited */}
           {!isAlreadyVisited ? (
             <Pressable
               onPress={handleSave}
@@ -939,10 +843,17 @@ const checkCustomerStatus = async () => {
             >
               {saving ? (
                 <ActivityIndicator size="small" color="#ffffff" />
-              ) : isSaveEnabled ? 
-                ( <Text style={tw`text-white text-lg font-bold text-center`}> Save </Text> ) : 
-                ( <Text style={tw`text-white text-base font-bold text-center`}> Complete Steps </Text> )
-              }
+              ) : isSaveEnabled ? (
+                <Text style={tw`text-white text-lg font-bold text-center`}>
+                  {" "}
+                  Save{" "}
+                </Text>
+              ) : (
+                <Text style={tw`text-white text-base font-bold text-center`}>
+                  {" "}
+                  Complete Steps{" "}
+                </Text>
+              )}
             </Pressable>
           ) : (
             <Pressable
@@ -958,26 +869,21 @@ const checkCustomerStatus = async () => {
             >
               {saving ? (
                 <ActivityIndicator size="small" color="#ffffff" />
-              ) : isSaveEnabled ? 
-                ( <Text style={tw`text-white text-lg font-bold text-center`}> Update </Text> ) : 
-                ( <Text style={tw`text-white text-base font-bold text-center`}> Complete Steps </Text> )
-              }
+              ) : isSaveEnabled ? (
+                <Text style={tw`text-white text-lg font-bold text-center`}>
+                  {" "}
+                  Update{" "}
+                </Text>
+              ) : (
+                <Text style={tw`text-white text-base font-bold text-center`}>
+                  {" "}
+                  Complete Steps{" "}
+                </Text>
+              )}
             </Pressable>
           )}
         </View>
 
-        {/* Modals */}
-        {/* <Modal
-          animationType="slide"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={() => setModalVisible(false)}
-        >
-          <CustRelated
-            person={selectedPerson}
-            onClose={() => setModalVisible(false)}
-          />
-        </Modal> */}
         {/* Modals */}
         <Modal
           animationType="slide"
@@ -1002,10 +908,13 @@ const checkCustomerStatus = async () => {
 
         {/* Image Viewing Modal */}
         <ImageViewing
-          images={[{ uri: capturedImage?.imageUri }]}
+          images={imageViewImages}
           imageIndex={0}
           visible={imageViewVisible}
           onRequestClose={() => setImageViewVisible(false)}
+          onImageIndexChange={() => setImageError(false)}
+          onImageLoad={() => setImageError(false)}
+          onImageLoadError={handleImageError}
         />
       </View>
     </Animated.View>

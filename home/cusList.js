@@ -211,7 +211,7 @@ const CusList = () => {
   // );
 
   const handleCardPress = (customer) => {
-    console.log("👉 Customer selected:", customer.customer_name);
+    // console.log("👉 Customer selected:", customer.customer_name);
     setSelectedPerson(customer);
     setModalVisible(true);
   };

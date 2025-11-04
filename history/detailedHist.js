@@ -1,5 +1,6 @@
+// DetailedHist.js
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,14 +9,22 @@ import {
   Dimensions,
   ScrollView,
   TouchableOpacity,
+  Modal,
+  Image,
+  ActivityIndicator,
 } from "react-native";
 import tw from "tailwind-react-native-classnames";
+import axios from "axios";
 
 const { height } = Dimensions.get("window");
+const API_BASE_URL = "https://your-backend-api.com/api"; // Replace with your actual API URL
 
 const DetailedHist = ({ person, onClose }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const translateYAnim = useRef(new Animated.Value(height)).current; // slide up from bottom
+  const translateYAnim = useRef(new Animated.Value(height)).current;
+  const [responseImageVisible, setResponseImageVisible] = useState(false);
+  const [selectedResponseImage, setSelectedResponseImage] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -31,6 +40,38 @@ const DetailedHist = ({ person, onClose }) => {
       }),
     ]).start();
   }, []);
+
+  const handleResponseImagePress = async (responseType) => {
+    if (person[responseType]) {
+      setImageLoading(true);
+      setSelectedResponseImage(person[responseType]);
+      setResponseImageVisible(true);
+      setImageLoading(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString();
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatTime = (timeString) => {
+    if (!timeString) return "N/A";
+    try {
+      const date = new Date(timeString);
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return timeString;
+    }
+  };
 
   if (!person) return null;
 
@@ -59,40 +100,64 @@ const DetailedHist = ({ person, onClose }) => {
             { color: "#7cc0d8" },
           ]}
         >
-          {person.name}
+          {person?.name || "Customer Details"}
         </Text>
 
-        <ScrollView>
-          <InfoRow label="City" value={person.city} />
-          <InfoRow label="PT.no" value={person.PtNo} />
-          <InfoRow label="Visted Date" value={person.visitDate} />
-          <InfoRow label="Loan Amount" value={person.amount} />
-          <InfoRow label="Paid" value={person.jama} />
-          <InfoRow label="Loan Created" value={person.loanCreated} />
-          <InfoRow label="Tenure" value={person.tenure} />
-          <InfoRow label="Interest" value={person.interest} />
-          <InfoRow label="Ornament" value={person.ornament} />
-          <InfoRow label="1st letter" value={person.letter1} />
-          <InfoRow label="2st letter" value={person.letter2} />
-          <InfoRow label="Final letter" value={person.finalLetter} />
-          <InfoRow label="Number" value={person.number} />
-          <InfoRow label="Address" value={person.address} />
-          <InfoRow label="Last Date" value={person.lastDate} />
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Make sure each InfoRow has a unique key */}
+          <InfoRow key="mobile" label="Mobile Number" value={person?.number} />
+          <InfoRow key="city" label="City" value={person?.city} />
+          <InfoRow key="address" label="Address" value={person?.address} />
+          <InfoRow key="pt_no" label="PT Number" value={person?.pt_no} />
           <InfoRow
-            label="Response 1"
-            value={person.Response1}
-            onResponseImagePress={() => setResponseImageVisible(true)}
+            key="visit_date"
+            label="Visit Date"
+            value={person?.visitDate}
           />
           <InfoRow
-            label="Response 2"
-            value={person.Response2}
-            onResponseImagePress={() => setResponseImageVisible(true)}
+            key="visited_time"
+            label="Visited Time"
+            value={formatTime(person?.visited_time)}
           />
-          <View style={tw`mb-2`}>
+          <InfoRow key="response" label="Response" value={person?.response} />
+          <InfoRow key="amount" label="Loan Amount" value={person?.amount} />
+          <InfoRow key="paid" label="Amount Paid" value={person?.jama} />
+          <InfoRow
+            key="loan_created"
+            label="Loan Created"
+            value={person?.loanCreated}
+          />
+          <InfoRow key="tenure" label="Tenure" value={person?.tenure} />
+          <InfoRow key="interest" label="Interest" value={person?.interest} />
+          <InfoRow key="ornament" label="Ornament" value={person?.ornament} />
+          <InfoRow key="letter1" label="1st Letter" value={person?.letter1} />
+          <InfoRow key="letter2" label="2nd Letter" value={person?.letter2} />
+          <InfoRow
+            key="final_letter"
+            label="Final Letter"
+            value={person?.finalLetter}
+          />
+          <InfoRow key="last_date" label="Last Date" value={person?.lastDate} />
+
+          {/* Response Images */}
+          <ResponseImageRow
+            key="response1"
+            label="Response 1 Image"
+            value={person?.Response1}
+            onPress={() => handleResponseImagePress("Response1")}
+          />
+          <ResponseImageRow
+            key="response2"
+            label="Response 2 Image"
+            value={person?.Response2}
+            onPress={() => handleResponseImagePress("Response2")}
+          />
+
+          <View style={tw`mt-6 mb-10`}>
             <Pressable
               onPress={onClose}
               style={[
-                tw`absolute bottom-10 self-center rounded-full px-10 py-3`,
+                tw`self-center rounded-full px-10 py-3`,
                 { backgroundColor: "#7cc0d8" },
               ]}
             >
@@ -100,52 +165,55 @@ const DetailedHist = ({ person, onClose }) => {
             </Pressable>
           </View>
         </ScrollView>
-
-        {/* <View style={tw`px-4`}>
-          <Text style={tw`text-lg mb-4`}>
-            <Text style={tw`font-bold text-gray-800`}>Number: </Text>
-            <Text style={tw`text-gray-700`}>{person.number}</Text>
-          </Text>
-
-          <Text style={tw`text-lg mb-4`}>
-            <Text style={tw`font-bold text-gray-800`}>Area: </Text>
-            <Text style={tw`text-gray-700`}>{person.area}</Text>
-          </Text>
-
-          <Text style={tw`text-lg mb-4`}>
-            <Text style={tw`font-bold text-gray-800`}>Amount: </Text>
-            <Text style={tw`text-gray-700`}>{person.amount}</Text>
-          </Text>
-
-          <Text style={tw`text-lg mb-4`}>
-            <Text style={tw`font-bold text-gray-800`}>Date: </Text>
-            <Text style={tw`text-gray-700`}>{person.date}</Text>
-          </Text>
-        </View> */}
       </View>
     </Animated.View>
   );
 };
 
-const InfoRow = ({ label, value, onResponseImagePress }) => {
-  const isResponse = label === "Response 1" || label === "Response 2";
-
+const InfoRow = ({ label, value }) => {
   return (
     <View
       style={[
-        tw`flex-row justify-between border-b py-2`,
-        { borderBottomColor: "#7cc0d8" },
+        tw`flex-row justify-between border-b py-3`,
+        { borderBottomColor: "#e5e7eb" },
       ]}
     >
-      <Text style={tw`text-base font-semibold text-gray-800`} numberOfLines={1}>
+      <Text style={tw`text-base font-semibold text-gray-800 flex-1`}>
         {label}
       </Text>
-      <Text style={tw`text-base text-gray-700 flex-1 text-right`}>{value}</Text>
-      {isResponse && (
-        <TouchableOpacity onPress={() => onResponseImagePress(label)}>
-          <Ionicons name="image" size={24} color="black" style={tw`ml-2`} />
-        </TouchableOpacity>
-      )}
+      <Text style={tw`text-base text-gray-700 flex-1 text-right`}>
+        {value || "N/A"}
+      </Text>
+    </View>
+  );
+};
+
+const ResponseImageRow = ({ label, value, onPress }) => {
+  return (
+    <View
+      style={[
+        tw`flex-row justify-between border-b py-3 items-center`,
+        { borderBottomColor: "#e5e7eb" },
+      ]}
+    >
+      <Text style={tw`text-base font-semibold text-gray-800 flex-1`}>
+        {label}
+      </Text>
+      <TouchableOpacity
+        onPress={onPress}
+        style={tw`flex-row items-center`}
+        disabled={!value}
+      >
+        <Text
+          style={[
+            tw`text-base mr-2`,
+            value ? tw`text-blue-500` : tw`text-gray-400`,
+          ]}
+        >
+          {value ? "View Image" : "No Image"}
+        </Text>
+        {value && <Ionicons name="eye" size={20} color="#3b82f6" />}
+      </TouchableOpacity>
     </View>
   );
 };
