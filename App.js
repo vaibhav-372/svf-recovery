@@ -286,10 +286,10 @@ export default function App() {
           source={require("./assets/kohli.webp")}
           style={{ width: 140, height: 140, borderRadius: 50, marginBottom: 20 }}
         />
-        <ActivityIndicator size="large" color="#7cc0d8" />
+        {/* <ActivityIndicator size="large" color="#7cc0d8" />
         <Text style={{ marginTop: 10, color: "#7cc0d8", fontSize: 16 }}>
           {initializationStep}
-        </Text>
+        </Text> */}
       </View>
     );
   }

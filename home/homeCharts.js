@@ -1,13 +1,16 @@
-import React from 'react';
-import { View, Text, Dimensions, ScrollView } from 'react-native';
-import { BarChart, LineChart } from 'react-native-chart-kit';
-import tw from 'tailwind-react-native-classnames';
+import React from "react";
+import { View, Text, Dimensions, ScrollView } from "react-native";
+import { BarChart, LineChart } from "react-native-chart-kit";
+import tw from "tailwind-react-native-classnames";
 
-const screenWidth = Dimensions.get('window').width;
+const screenWidth = Dimensions.get("window").width;
 
 const HomeCharts = () => {
   const labels = Array.from({ length: 30 }, (_, i) => `${i + 1}`);
-  const values = Array.from({ length: 30 }, () => Math.floor(Math.random() * 10) + 1);
+  const values = Array.from(
+    { length: 30 },
+    () => Math.floor(Math.random() * 10) + 1
+  );
 
   const data = {
     labels,
@@ -18,13 +21,13 @@ const HomeCharts = () => {
         strokeWidth: 2,
       },
     ],
-    legend: ['Visits per Day'],
+    legend: ["Visits per Day"],
   };
 
   const chartConfig = {
-    backgroundColor: '#ffffff',
-    backgroundGradientFrom: '#ffffff',
-    backgroundGradientTo: '#ffffff',
+    backgroundColor: "#ffffff",
+    backgroundGradientFrom: "#ffffff",
+    backgroundGradientTo: "#ffffff",
     decimalPlaces: 0,
     color: (opacity = 1) => `rgba(124, 192, 216, ${opacity})`,
     labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
@@ -32,16 +35,18 @@ const HomeCharts = () => {
       borderRadius: 16,
     },
     propsForDots: {
-      r: '4',
-      strokeWidth: '2',
-      stroke: '#7cc0d8',
+      r: "4",
+      strokeWidth: "2",
+      stroke: "#7cc0d8",
     },
   };
 
   return (
     <ScrollView horizontal>
       <View style={tw`p-2 m-2`}>
-        <Text style={tw`text-xl font-bold mb-2`}>Visit History - Bar Chart</Text>
+        <Text style={tw`text-xl font-bold mb-2`}>
+          Visit History - Bar Chart
+        </Text>
 
         {/* Bar Chart with Value Labels */}
         <View>
@@ -59,10 +64,10 @@ const HomeCharts = () => {
           />
         </View>
 
-        <Text style={tw`text-xl font-bold mb-2`}>Visit Trend - Line Chart</Text>
+        {/* <Text style={tw`text-xl font-bold mb-2`}>Visit Trend - Line Chart</Text> */}
 
         {/* Line Chart with Value Labels */}
-        <View>
+        {/* <View>
           <LineChart
             data={data}
             width={screenWidth * 3}
@@ -75,7 +80,6 @@ const HomeCharts = () => {
             withInnerLines={false}
             withShadow={false}
           />
-          {/* Overlaying the values manually */}
           <View
             style={{
               position: 'absolute',
@@ -95,15 +99,15 @@ const HomeCharts = () => {
                   fontSize: 10,
                   color: 'black',
                   position: 'absolute',
-                  top: 200 - value * 20, // approximate vertical offset
-                  left: index * 35, // spacing based on chart width
+                  top: 200 - value * 20,
+                  left: index * 35,
                 }}
               >
                 {value}
               </Text>
             ))}
           </View>
-        </View>
+        </View> */}
       </View>
     </ScrollView>
   );

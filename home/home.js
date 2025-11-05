@@ -18,9 +18,8 @@ import CusList from "./cusList";
 // import { Image } from 'react-native-svg'
 
 const Home = () => {
+  const { user, token } = useAuth();
 
-    const { user, token } = useAuth();
-  
   const visits = 73;
   const total = 194;
   const progress = visits / total;
@@ -63,10 +62,10 @@ const Home = () => {
       </View>
 
       <Text style={tw`text-center text-2xl font-extrabold`}>PNL recovery</Text>
-      <Ratings />
       {/* <Text>{Date()}</Text> */}
 
       <View style={tw`flex-row justify-around mt-5 px-4`}>
+        <Ratings />
         <View style={tw`items-center`}>
           <Progress.Circle
             size={120}
@@ -82,7 +81,7 @@ const Home = () => {
           <Text style={tw`mt-2 text-gray-600 text-base font-bold`}>Visits</Text>
         </View>
 
-        <View style={tw`items-center`}>
+        {/* <View style={tw`items-center`}>
           <Progress.Circle
             size={120}
             progress={travel / 10}
@@ -97,13 +96,125 @@ const Home = () => {
           <Text style={tw`mt-2 text-gray-600 text-base font-bold`}>
             Avg travel/day: {travel.toFixed(1)}
           </Text>
-        </View>
+        </View> */}
       </View>
+
+      {/* Cards Section - Fixed with static requires */}
+      {/* <View style={tw`flex flex-row flex-wrap justify-between px-4 mt-4`}>
+        <View>
+          <View
+            style={tw`bg-white rounded-xl shadow-md p-5 mb-4 border border-gray-100 items-center`}
+          >
+            <View style={tw`flex-row items-center w-full justify-between mb-3`}>
+              <Image
+                source={require("../assets/pending-list.png")}
+                style={tw`w-12 h-12`}
+              />
+              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+            </View>
+            <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
+              Pending List
+            </Text>
+          </View>
+
+          <View
+            style={tw`bg-white rounded-xl shadow-md p-5 mb-4 border border-gray-100 items-center`}
+          >
+            <View style={tw`flex-row items-center w-full justify-between mb-3`}>
+              <Image
+                source={require("../assets/visited-list.png")}
+                style={tw`w-12 h-12`}
+              />
+              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+            </View>
+            <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
+              Visited List
+            </Text>
+          </View>
+        </View>
+
+        <View>
+          <View
+            style={tw`bg-white rounded-xl shadow-md p-5 mb-4 border border-gray-100 items-center`}
+          >
+            <View style={tw`flex-row items-center w-full justify-between mb-3`}>
+              <Image
+                source={require("../assets/history-list.png")}
+                style={tw`w-12 h-12`}
+              />
+              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+            </View>
+            <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
+              History List
+            </Text>
+          </View>
+
+          <View
+            style={tw`bg-white rounded-xl shadow-md p-5 mb-4 border border-gray-100 items-center`}
+          >
+            <View style={tw`flex-row items-center w-full justify-between mb-3`}>
+              <Image
+                source={require("../assets/settings.png")}
+                style={tw`w-12 h-12`}
+              />
+              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+            </View>
+            <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
+              Settings
+            </Text>
+          </View>
+        </View>
+      </View> */}
+      
+      <View style={tw`flex flex-row flex-wrap justify-between px-4 mt-4`}>
+        {[
+          {
+            icon: require("../assets/pending-list.png"),
+            title: "Pending List",
+          },
+          {
+            icon: require("../assets/visited-list.png"),
+            title: "Visited List",
+          },
+          {
+            icon: require("../assets/history-list.png"),
+            title: "History List",
+          },
+          { icon: require("../assets/settings.png"), title: "Settings" },
+        ].map((item, index) => (
+          <View
+            key={index}
+            style={tw`w-1/2 ${index % 2 === 0 ? "pr-2" : "pl-2"}`}
+          >
+            <View
+              style={[
+                tw`bg-white p-5 mb-4 rounded-lg shadow flex flex-col justify-between`,
+                {
+                  borderLeftWidth: 5,
+                  borderLeftColor: "#7cc0d8",
+                  elevation: 5,
+                },
+              ]}
+            >
+              <View
+                style={tw`flex-row items-center w-full justify-between mb-3`}
+              >
+                <Image source={item.icon} style={tw`w-12 h-12`} />
+                <Ionicons name="chevron-forward" size={20} color="#6B7280" />
+              </View>
+              <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
+                {item.title}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
       {/* <Text style={tw`text-lg font-bold p-3`}>{new Date().toLocaleDateString()}</Text> */}
-      <CusList />
+      {/* <CusList /> */}
       {/* </ImageBackground> */}
       <HomeCharts />
-      <HomeHist />
+      {/* <HomeHist /> */}
     </ScrollView>
   );
 };
