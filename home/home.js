@@ -15,10 +15,12 @@ import HomeHist from "./HomeHist";
 import Ratings from "./Ratings";
 import { useAuth } from "../context/AuthContext";
 import CusList from "./cusList";
+import { useNavigation } from "@react-navigation/native";
 // import { Image } from 'react-native-svg'
 
 const Home = () => {
   const { user, token } = useAuth();
+  const navigation = useNavigation();
 
   const visits = 73;
   const total = 194;
@@ -27,6 +29,54 @@ const Home = () => {
   const dist = 24;
   const days = 3;
   const travel = dist / days;
+
+  const handlePendingPress = () => {
+    navigation.navigate("Customers", {
+      agentName: user?.username,
+      initialTab: "pending",
+    });
+  };
+
+  const handleVisitedPress = () => {
+    navigation.navigate("Customers", {
+      agentName: user?.username,
+      initialTab: "visited",
+    });
+  };
+
+  const handleHistoryPress = () => {
+    // Add navigation for History List if needed
+    console.log("History List pressed");
+  };
+
+  const handleSettingsPress = () => {
+    // Add navigation for Settings if needed
+    console.log("Settings pressed");
+  };
+
+  // Card data with handlers
+  const cardData = [
+    {
+      icon: require("../assets/pending-list.png"),
+      title: "Pending List",
+      onPress: handlePendingPress,
+    },
+    {
+      icon: require("../assets/visited-list.png"),
+      title: "Visited List",
+      onPress: handleVisitedPress,
+    },
+    {
+      icon: require("../assets/history-list.png"),
+      title: "History List",
+      onPress: handleHistoryPress,
+    },
+    {
+      icon: require("../assets/settings.png"),
+      title: "Settings",
+      onPress: handleSettingsPress,
+    },
+  ];
 
   return (
     <ScrollView style={tw`bg-white flex-1`}>
@@ -99,92 +149,12 @@ const Home = () => {
         </View> */}
       </View>
 
-      {/* Cards Section - Fixed with static requires */}
-      {/* <View style={tw`flex flex-row flex-wrap justify-between px-4 mt-4`}>
-        <View>
-          <View
-            style={tw`bg-white rounded-xl shadow-md p-5 mb-4 border border-gray-100 items-center`}
-          >
-            <View style={tw`flex-row items-center w-full justify-between mb-3`}>
-              <Image
-                source={require("../assets/pending-list.png")}
-                style={tw`w-12 h-12`}
-              />
-              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
-            </View>
-            <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
-              Pending List
-            </Text>
-          </View>
-
-          <View
-            style={tw`bg-white rounded-xl shadow-md p-5 mb-4 border border-gray-100 items-center`}
-          >
-            <View style={tw`flex-row items-center w-full justify-between mb-3`}>
-              <Image
-                source={require("../assets/visited-list.png")}
-                style={tw`w-12 h-12`}
-              />
-              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
-            </View>
-            <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
-              Visited List
-            </Text>
-          </View>
-        </View>
-
-        <View>
-          <View
-            style={tw`bg-white rounded-xl shadow-md p-5 mb-4 border border-gray-100 items-center`}
-          >
-            <View style={tw`flex-row items-center w-full justify-between mb-3`}>
-              <Image
-                source={require("../assets/history-list.png")}
-                style={tw`w-12 h-12`}
-              />
-              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
-            </View>
-            <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
-              History List
-            </Text>
-          </View>
-
-          <View
-            style={tw`bg-white rounded-xl shadow-md p-5 mb-4 border border-gray-100 items-center`}
-          >
-            <View style={tw`flex-row items-center w-full justify-between mb-3`}>
-              <Image
-                source={require("../assets/settings.png")}
-                style={tw`w-12 h-12`}
-              />
-              <Ionicons name="chevron-forward" size={20} color="#6B7280" />
-            </View>
-            <Text style={tw`font-bold text-lg text-gray-800 text-center`}>
-              Settings
-            </Text>
-          </View>
-        </View>
-      </View> */}
-      
       <View style={tw`flex flex-row flex-wrap justify-between px-4 mt-4`}>
-        {[
-          {
-            icon: require("../assets/pending-list.png"),
-            title: "Pending List",
-          },
-          {
-            icon: require("../assets/visited-list.png"),
-            title: "Visited List",
-          },
-          {
-            icon: require("../assets/history-list.png"),
-            title: "History List",
-          },
-          { icon: require("../assets/settings.png"), title: "Settings" },
-        ].map((item, index) => (
-          <View
+        {cardData.map((item, index) => (
+          <TouchableOpacity
             key={index}
             style={tw`w-1/2 ${index % 2 === 0 ? "pr-2" : "pl-2"}`}
+            onPress={item.onPress}
           >
             <View
               style={[
@@ -206,7 +176,7 @@ const Home = () => {
                 {item.title}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 

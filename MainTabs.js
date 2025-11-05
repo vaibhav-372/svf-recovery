@@ -1,3 +1,4 @@
+// MainTabs.js
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,7 +13,6 @@ const Tab = createBottomTabNavigator();
 
 const MainTabs = () => {
   return (
-    // <SafeAreaView style={{ flex: 1, backgroundColor: '#000', color: '#fff' }}>
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
       <StatusBar
         barStyle="light-content" 
@@ -47,7 +47,11 @@ const MainTabs = () => {
         })}
       >
         <Tab.Screen name="Home" component={Home} />
-        <Tab.Screen name="Customers" component={Customers} />
+        <Tab.Screen 
+          name="Customers" 
+          component={Customers}
+          initialParams={{ initialTab: "pending" }}
+        />
         <Tab.Screen name="Hist" component={History} />
         <Tab.Screen name="Settings" component={Settings} />
       </Tab.Navigator>

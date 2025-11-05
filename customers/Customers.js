@@ -15,11 +15,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import tw from "tailwind-react-native-classnames";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
-import { useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import DetailedCust from "./DetailedCust";
 
 const Customers = () => {
   const route = useRoute();
+  const navigation = useNavigation();
   const { user, token } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
@@ -30,32 +31,76 @@ const Customers = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Configuration
+  // Get navigation parameters to determine which tab to show initially
+  // const { showPendingOnly, showVisitedOnly, agentName } = route.params || {};
+
+  // const [activeTab, setActiveTab] = useState(
+  //   showPendingOnly ? "pending" : showVisitedOnly ? "visited" : "pending"
+  // );
+
+  const {
+    initialTab = "pending",
+    agentName,
+    showPendingOnly,
+    showVisitedOnly,
+  } = route.params || {};
+
+  const [activeTab, setActiveTab] = useState(
+    showPendingOnly ? "pending" : showVisitedOnly ? "visited" : initialTab
+  );
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      const newActiveTab = showPendingOnly
+        ? "pending"
+        : showVisitedOnly
+          ? "visited"
+          : initialTab;
+      setActiveTab(newActiveTab);
+    });
+
+    return unsubscribe;
+  }, [navigation, initialTab, showPendingOnly, showVisitedOnly]);
+
+  useEffect(() => {
+    const newActiveTab = showPendingOnly
+      ? "pending"
+      : showVisitedOnly
+        ? "visited"
+        : initialTab;
+    setActiveTab(newActiveTab);
+  }, [initialTab, showPendingOnly, showVisitedOnly]);
+
+
   const SERVER_IP = "192.168.65.11";
   const BASE_URL = `http://${SERVER_IP}:3000/api`;
   const REQUEST_TIMEOUT = 10000;
 
-  // Enhanced visited status checker
   const isCustomerVisited = (customer) => {
-  // For current agent's most recent visit status
-  const isVisited = customer.isVisited;
-  const visited = customer.visited;
-  
-  // Check isVisited field (current agent's most recent status)
-  if (isVisited === 1 || isVisited === true || isVisited === '1' || isVisited === 'true') {
-    return true;
-  }
-  
-  // Check visited field
-  if (visited === 1 || visited === true || visited === '1' || visited === 'true') {
-    return true;
-  }
-  
-  return false;
-};
+    const isVisited = customer.isVisited;
+    const visited = customer.visited;
 
+    if (
+      isVisited === 1 ||
+      isVisited === true ||
+      isVisited === "1" ||
+      isVisited === "true"
+    ) {
+      return true;
+    }
 
-  // Secure fetch wrapper
+    if (
+      visited === 1 ||
+      visited === true ||
+      visited === "1" ||
+      visited === "true"
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
   const secureFetch = async (endpoint, options = {}) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
@@ -90,7 +135,6 @@ const Customers = () => {
     }
   };
 
-  // Update customer visited status
   const updateCustomerVisitedStatus = (customerId) => {
     setCustomers((prevCustomers) =>
       prevCustomers.map((customer) =>
@@ -101,7 +145,6 @@ const Customers = () => {
     );
   };
 
-  // Fetch customers independently - useCallback to prevent unnecessary re-renders
   const fetchCustomers = useCallback(
     async (showLoader = true, forceRefresh = false) => {
       // Don't fetch if we already have data and it's not a force refresh
@@ -138,10 +181,6 @@ const Customers = () => {
             ? data.customers
             : [];
 
-          // console.log(
-          //   `📥 Raw API response: ${customersData.length} customers received`
-          // );
-
           const validatedCustomers = customersData.map((customer) => ({
             id: customer.entry_id || Math.random().toString(),
             name: customer.customer_name || "N/A",
@@ -160,10 +199,6 @@ const Customers = () => {
           const totalFromServer = customersData.length;
           const visitedCount = customersData.filter(isCustomerVisited).length;
           const nonVisitedCount = totalFromServer - visitedCount;
-          // console.log("📊 SERVER DATA ANALYSIS:");
-          // console.log(`   Total: ${totalFromServer}`);
-          // console.log(`   Non-visited: ${nonVisitedCount}`);
-          // console.log(`   Visited: ${visitedCount}`);
         } else {
           throw new Error(data.message || "Failed to fetch customers");
         }
@@ -231,7 +266,6 @@ const Customers = () => {
   }, [route.params, dataLoaded, fetchCustomers]);
 
   const handlePress = (person) => {
-    // console.log("👉 Customer selected:", person.name);
     setSelectedPerson(person);
     setModalVisible(true);
   };
@@ -280,12 +314,6 @@ const Customers = () => {
   );
   const visitedCustomers = filteredCustomers.filter(isCustomerVisited);
 
-  // Calculate totals
-  const totalNonVisited = customers.filter(
-    (customer) => !isCustomerVisited(customer)
-  ).length;
-  const totalVisited = customers.filter(isCustomerVisited).length;
-
   if (loading) {
     return (
       <View style={tw`flex-1 bg-white justify-center items-center`}>
@@ -326,7 +354,11 @@ const Customers = () => {
         <View style={tw`flex-row justify-between items-center mb-3`}>
           <Text style={tw`text-lg font-bold`}>
             Customer List{" "}
-            {route.params?.agentName ? `- ${route.params.agentName}` : ""}
+            {agentName
+              ? `- ${agentName}`
+              : user?.username
+                ? `- ${user.username}`
+                : ""}
           </Text>
           <TouchableOpacity onPress={handleRefresh} disabled={refreshing}>
             {refreshing ? (
@@ -358,8 +390,48 @@ const Customers = () => {
           )}
         </View>
 
-        {/* Pending Customers Section - At Top */}
-        {nonVisitedCustomers.length > 0 && (
+        {/* Navigation Tabs */}
+        <View style={tw`flex-row mb-4 bg-gray-100 rounded-lg p-1`}>
+          <TouchableOpacity
+            style={[
+              tw`flex-1 py-2 rounded-md items-center`,
+              activeTab === "pending" && { backgroundColor: "#fee2e2" },
+            ]}
+            onPress={() => setActiveTab("pending")}
+          >
+            <Text
+              style={[
+                tw`text-xs font-semibold`,
+                activeTab === "pending"
+                  ? { color: "#991b1b" }
+                  : { color: "#6b7280" },
+              ]}
+            >
+              Pending ({nonVisitedCustomers.length}/{customers.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              tw`flex-1 py-2 rounded-md items-center`,
+              activeTab === "visited" && { backgroundColor: "#d1fae5" },
+            ]}
+            onPress={() => setActiveTab("visited")}
+          >
+            <Text
+              style={[
+                tw`text-xs font-semibold`,
+                activeTab === "visited"
+                  ? { color: "#065f46" }
+                  : { color: "#6b7280" },
+              ]}
+            >
+              Visited ({visitedCustomers.length}/{customers.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Pending Customers Section - Only shown when pending tab is active */}
+        {activeTab === "pending" && nonVisitedCustomers.length > 0 && (
           <View style={tw`mb-6`}>
             <View style={tw`flex-row items-center justify-between mb-3`}>
               <Text style={tw`text-base font-bold text-red-600`}>
@@ -432,8 +504,8 @@ const Customers = () => {
           </View>
         )}
 
-        {/* Visited Customers Section - At Bottom in Green */}
-        {visitedCustomers.length > 0 && (
+        {/* Visited Customers Section - Only shown when visited tab is active */}
+        {activeTab === "visited" && visitedCustomers.length > 0 && (
           <View style={tw`mb-4`}>
             <View style={tw`flex-row items-center justify-between mb-3`}>
               <Text style={tw`text-base font-bold text-green-600`}>
@@ -507,13 +579,22 @@ const Customers = () => {
         )}
 
         {/* No Results Message */}
-        {filteredCustomers.length === 0 && (
+        {((activeTab === "pending" && nonVisitedCustomers.length === 0) ||
+          (activeTab === "visited" && visitedCustomers.length === 0)) && (
           <View style={tw`items-center p-6`}>
-            <Ionicons name="search" size={32} color="#9ca3af" />
+            <Ionicons
+              name={
+                activeTab === "pending"
+                  ? "time-outline"
+                  : "checkmark-circle-outline"
+              }
+              size={32}
+              color="#9ca3af"
+            />
             <Text style={tw`text-gray-600 text-xs mt-2 text-center`}>
               {searchQuery
-                ? "No customers found matching your search"
-                : "No customers available"}
+                ? `No ${activeTab} customers found matching your search`
+                : `No ${activeTab} customers available`}
             </Text>
             {searchQuery && (
               <TouchableOpacity

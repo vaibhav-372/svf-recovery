@@ -6,35 +6,45 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import MainTabs from "./MainTabs";
 import CameraComponent from "./customers/CameraComponent";
 import LoginScreen from "./screens/LoginScreen";
-import { 
-  ActivityIndicator, 
-  View, 
-  Text, 
-  Image, 
+import {
+  ActivityIndicator,
+  View,
+  Text,
+  Image,
   BackHandler,
-  TouchableOpacity 
+  TouchableOpacity,
 } from "react-native";
+import Customers from "./customers/Customers";
 
 const Stack = createNativeStackNavigator();
 
 const LoadingScreen = () => (
-  <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "white" }}>
+  <View
+    style={{
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "white",
+    }}
+  >
     <Image
       source={require("./assets/kohli.webp")}
       style={{ width: 140, height: 140, borderRadius: 50, marginBottom: 20 }}
     />
     <ActivityIndicator size="large" color="#7cc0d8" />
-    <Text style={{ marginTop: 10, color: "#7cc0d8", fontSize: 16 }}>Loading...</Text>
+    <Text style={{ marginTop: 10, color: "#7cc0d8", fontSize: 16 }}>
+      Loading...
+    </Text>
   </View>
 );
 
 class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { 
-      hasError: false, 
-      error: null, 
-      errorInfo: null
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null,
     };
   }
 
@@ -46,7 +56,7 @@ class AppErrorBoundary extends React.Component {
     console.error("App Error Boundary Caught:", error, errorInfo);
     this.setState({
       error: error,
-      errorInfo: errorInfo
+      errorInfo: errorInfo,
     });
   }
 
@@ -61,38 +71,59 @@ class AppErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: 'white' }}>
-          <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 10, color: '#ef4444' }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 20,
+            backgroundColor: "white",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "bold",
+              marginBottom: 10,
+              color: "#ef4444",
+            }}
+          >
             Something went wrong
           </Text>
-          <Text style={{ textAlign: 'center', marginBottom: 20, color: '#6b7280' }}>
+          <Text
+            style={{ textAlign: "center", marginBottom: 20, color: "#6b7280" }}
+          >
             The app encountered an unexpected error.
           </Text>
-          
-          <View style={{ flexDirection: 'row', marginTop: 20 }}>
-            <TouchableOpacity 
+
+          <View style={{ flexDirection: "row", marginTop: 20 }}>
+            <TouchableOpacity
               onPress={this.handleReset}
-              style={{ 
-                backgroundColor: '#7cc0d8',
+              style={{
+                backgroundColor: "#7cc0d8",
                 paddingHorizontal: 20,
                 paddingVertical: 10,
                 borderRadius: 5,
                 marginRight: 10,
               }}
             >
-              <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Again</Text>
+              <Text style={{ color: "white", fontWeight: "bold" }}>
+                Try Again
+              </Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               onPress={this.handleExit}
-              style={{ 
-                backgroundColor: '#ef4444',
+              style={{
+                backgroundColor: "#ef4444",
                 paddingHorizontal: 20,
                 paddingVertical: 10,
                 borderRadius: 5,
               }}
             >
-              <Text style={{ color: 'white', fontWeight: 'bold' }}>Exit App</Text>
+              <Text style={{ color: "white", fontWeight: "bold" }}>
+                Exit App
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -112,48 +143,53 @@ const AppNavigator = () => {
 
   if (error) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 20,
+        }}
+      >
         <Text style={{ fontSize: 18, color: "#ef4444", marginBottom: 10 }}>
           Authentication Error
         </Text>
-        <Text style={{ textAlign: "center", color: "#6b7280" }}>
-          {error}
-        </Text>
+        <Text style={{ textAlign: "center", color: "#6b7280" }}>{error}</Text>
       </View>
     );
   }
 
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
+    <Stack.Navigator
+      screenOptions={{
         headerShown: false,
-        animation: 'slide_from_right',
+        animation: "slide_from_right",
       }}
     >
       {isAuthenticated ? (
         <>
-          <Stack.Screen 
-            name="Main" 
+          <Stack.Screen
+            name="Main"
             component={MainTabs}
             options={{
-              animation: 'fade',
+              animation: "fade",
             }}
           />
-          <Stack.Screen 
-            name="Camera" 
+          <Stack.Screen
+            name="Camera"
             component={CameraComponent}
             options={{
-              presentation: 'modal',
-              animation: 'slide_from_bottom',
+              presentation: "modal",
+              animation: "slide_from_bottom",
             }}
           />
         </>
       ) : (
-        <Stack.Screen 
-          name="Login" 
+        <Stack.Screen
+          name="Login"
           component={LoginScreen}
           options={{
-            animation: 'fade',
+            animation: "fade",
           }}
         />
       )}
@@ -171,18 +207,27 @@ const NavigationContainerWithErrorHandling = ({ children }) => {
   };
 
   const handleNavigationError = (error) => {
-    console.error('Navigation Error:', error);
+    console.error("Navigation Error:", error);
     setNavigationError(error);
     setNavigationReady(false);
   };
 
   if (navigationError) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 20,
+        }}
+      >
         <Text style={{ fontSize: 18, color: "#ef4444", marginBottom: 10 }}>
           Navigation Error
         </Text>
-        <Text style={{ textAlign: "center", color: "#6b7280", marginBottom: 20 }}>
+        <Text
+          style={{ textAlign: "center", color: "#6b7280", marginBottom: 20 }}
+        >
           There was a problem with navigation. Please restart the app.
         </Text>
       </View>
@@ -204,38 +249,38 @@ const NavigationContainerWithErrorHandling = ({ children }) => {
 export default function App() {
   const [appReady, setAppReady] = React.useState(false);
   const [appError, setAppError] = React.useState(null);
-  const [initializationStep, setInitializationStep] = React.useState('Starting...');
+  const [initializationStep, setInitializationStep] =
+    React.useState("Starting...");
 
   React.useEffect(() => {
     let mounted = true;
 
     const initializeApp = async () => {
       try {
-        console.log('App initialization started');
-        setInitializationStep('Initializing app...');
+        console.log("App initialization started");
+        setInitializationStep("Initializing app...");
 
         // Remove the timeout race condition and use simpler initialization
         // Just simulate a short loading time
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
         if (!mounted) return;
-        
-        setInitializationStep('Setting up services...');
-        
+
+        setInitializationStep("Setting up services...");
+
         // Add any actual initialization logic here
         // For example:
         // await initializeDatabase();
         // await loadCachedData();
-        
+
         if (!mounted) return;
-        
+
         setAppReady(true);
-        console.log('App initialization completed successfully');
-        
+        console.log("App initialization completed successfully");
       } catch (error) {
-        console.error('App initialization error:', error);
+        console.error("App initialization error:", error);
         if (mounted) {
-          setAppError(error.message || 'Initialization failed');
+          setAppError(error.message || "Initialization failed");
           setAppReady(true); // Still show UI even with error
         }
       }
@@ -245,9 +290,9 @@ export default function App() {
 
     // Set up global error handler (React Native way)
     const errorHandler = (error, isFatal) => {
-      console.log('Global Error Handler:', error, isFatal);
+      console.log("Global Error Handler:", error, isFatal);
       if (isFatal && mounted) {
-        setAppError('A fatal error occurred');
+        setAppError("A fatal error occurred");
       }
     };
 
@@ -264,7 +309,7 @@ export default function App() {
 
     // Handle promise rejections to prevent unhandled promise warnings
     const handlePromiseRejection = (event) => {
-      console.log('Unhandled Promise Rejection:', event);
+      console.log("Unhandled Promise Rejection:", event);
       // You can handle promise rejections here if needed
     };
 
@@ -281,10 +326,22 @@ export default function App() {
   // Enhanced loading screen with step information
   if (!appReady) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "white" }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: "white",
+        }}
+      >
         <Image
           source={require("./assets/kohli.webp")}
-          style={{ width: 140, height: 140, borderRadius: 50, marginBottom: 20 }}
+          style={{
+            width: 140,
+            height: 140,
+            borderRadius: 50,
+            marginBottom: 20,
+          }}
         />
         {/* <ActivityIndicator size="large" color="#7cc0d8" />
         <Text style={{ marginTop: 10, color: "#7cc0d8", fontSize: 16 }}>
@@ -296,23 +353,34 @@ export default function App() {
 
   if (appError) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 20,
+        }}
+      >
         <Text style={{ fontSize: 18, color: "#ef4444", marginBottom: 10 }}>
           Initialization Error
         </Text>
-        <Text style={{ textAlign: "center", color: "#6b7280", marginBottom: 20 }}>
+        <Text
+          style={{ textAlign: "center", color: "#6b7280", marginBottom: 20 }}
+        >
           {appError}
         </Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => setAppError(null)}
-          style={{ 
-            backgroundColor: '#7cc0d8',
+          style={{
+            backgroundColor: "#7cc0d8",
             paddingHorizontal: 20,
             paddingVertical: 10,
             borderRadius: 5,
           }}
         >
-          <Text style={{ color: 'white', fontWeight: 'bold' }}>Continue Anyway</Text>
+          <Text style={{ color: "white", fontWeight: "bold" }}>
+            Continue Anyway
+          </Text>
         </TouchableOpacity>
       </View>
     );
