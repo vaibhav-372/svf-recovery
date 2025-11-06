@@ -310,7 +310,7 @@ const CustRelated = ({ person, onClose }) => {
           const updatedResponses = { ...individualResponses };
           records.forEach((record) => {
             if (!record) return;
-            
+
             const ptNo = record.pt_no;
             if (!ptNo) return;
 
@@ -328,7 +328,10 @@ const CustRelated = ({ person, onClose }) => {
           setExistingResponses({});
         }
       } else {
-        console.log("Failed to load existing responses, status:", response.status);
+        console.log(
+          "Failed to load existing responses, status:",
+          response.status
+        );
         setExistingResponses({});
       }
     } catch (error) {
@@ -617,7 +620,7 @@ const CustRelated = ({ person, onClose }) => {
   // Calculate loan balance
   const calculateBalance = (item) => {
     if (!item) return "0.00";
-    
+
     const amount = parseFloat(getDisplayValue(item, "loan_amount")) || 0;
     const paid = parseFloat(getDisplayValue(item, "paid_amount")) || 0;
     return (amount - paid).toFixed(2);
@@ -910,9 +913,16 @@ const CustRelated = ({ person, onClose }) => {
             style={tw`items-center mt-3`}
           >
             {imageError ? (
-              <View style={[tw`justify-center items-center bg-gray-100`, { width: 150, height: 150 }]}>
+              <View
+                style={[
+                  tw`justify-center items-center bg-gray-100`,
+                  { width: 150, height: 150 },
+                ]}
+              >
                 <Ionicons name="image-outline" size={40} color="#9ca3af" />
-                <Text style={tw`text-gray-500 text-xs mt-2`}>Image not available</Text>
+                <Text style={tw`text-gray-500 text-xs mt-2`}>
+                  Image not available
+                </Text>
               </View>
             ) : (
               <Image
@@ -938,32 +948,43 @@ const CustRelated = ({ person, onClose }) => {
     <View style={tw`flex-1 bg-white`}>
       {/* Header */}
       <View style={tw`px-4 py-3 border-b border-gray-200`}>
-        <View style={tw`flex-row justify-between items-center`}>
-          <View style={tw`flex-1`}>
-            <Text style={tw`text-center text-xl font-bold text-gray-800`}>
-              {safeCustomerName}
-            </Text>
-            <Text style={tw`text-center text-sm text-gray-600 mt-1`}>
-              {customerRecords.length} Loan Account(s)
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => setShowPreviousResponses(true)}
-            style={tw`ml-4 p-2 bg-blue-100 rounded-lg`}
-          >
-            <Ionicons name="list" size={20} color="#3b82f6" />
-          </TouchableOpacity>
-        </View>
+        {/* Header */}
+        <View style={tw`px-4 py-3 border-b border-gray-200`}>
+          <View style={tw`flex-row justify-between items-center`}>
+            <View style={tw`flex-1`}>
+              <Text style={tw`text-center text-xl font-bold text-gray-800`}>
+                {safeCustomerName}
+              </Text>
+              <Text style={tw`text-center text-sm text-gray-600 mt-1`}>
+                {customerRecords.length} Loan Account(s)
+              </Text>
+            </View>
 
-        {/* Updated summary text */}
-        <Text style={tw`text-center text-xs text-blue-600 mt-1`}>
-          {Object.values(allPreviousResponses).reduce(
-            (total, responses) => total + (responses ? responses.length : 0),
-            0
-          ) > 0
-            ? `${Object.values(allPreviousResponses).reduce((total, responses) => total + (responses ? responses.length : 0), 0)} total responses across all PTs`
-            : "No previous visit responses"}
-        </Text>
+            {/* Close Button (X) in top right */}
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={28} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Updated summary text */}
+          <Text style={tw`text-center text-xs text-blue-600 mt-1`}>
+            {Object.values(allPreviousResponses).reduce(
+              (total, responses) => total + (responses ? responses.length : 0),
+              0
+            ) > 0
+              ? `${Object.values(allPreviousResponses).reduce((total, responses) => total + (responses ? responses.length : 0), 0)} total responses across all PTs`
+              : "No previous visit responses"}
+          </Text>
+
+          {loadingResponses && (
+            <View style={tw`flex-row justify-center items-center mt-1`}>
+              <ActivityIndicator size="small" color="#3b82f6" />
+              <Text style={tw`text-xs text-blue-600 ml-2`}>
+                Loading responses...
+              </Text>
+            </View>
+          )}
+        </View>
 
         {loadingResponses && (
           <View style={tw`flex-row justify-center items-center mt-1`}>
@@ -974,7 +995,7 @@ const CustRelated = ({ person, onClose }) => {
           </View>
         )}
       </View>
-      
+
       {customerRecords.length > 0 ? (
         <>
           {/* Horizontal PT Records */}
@@ -1015,19 +1036,16 @@ const CustRelated = ({ person, onClose }) => {
           </Text>
         </View>
       )}
-      
+
       {/* Close Button */}
       <Pressable
-        onPress={() => {
-          console.log("Close button pressed in CustRelated");
-          onClose();
-        }}
+        onPress={() => setShowPreviousResponses(true)}
         style={[
           tw`absolute bottom-3 self-center px-6 py-3 rounded-full`,
-          { backgroundColor: "#7cc0d8" },
+          { backgroundColor: "#3b82f6" },
         ]}
       >
-        <Text style={tw`text-white text-lg font-bold`}>Close</Text>
+        <Text style={tw`text-white text-lg font-bold`}>View All Responses</Text>
       </Pressable>
 
       <ImageViewing
@@ -1037,7 +1055,7 @@ const CustRelated = ({ person, onClose }) => {
         onRequestClose={() => setImageViewVisible(false)}
         onImageLoadError={() => setImageError(true)}
       />
-      
+
       {/* Previous Responses Modals */}
       {safeCustomerId && (
         <>

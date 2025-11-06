@@ -4,7 +4,6 @@ global.logImportant = (...args) => {
   console.info("[IMPORTANT]", ...args);
 };
 
-
 const express = require("express");
 const mysql = require("mysql2");
 const cors = require("cors");
@@ -1099,7 +1098,6 @@ app.get(
   }
 );
 
-
 app.get(
   "/api/check-customer-status/:customerId",
   authenticateToken,
@@ -2006,9 +2004,6 @@ app.get(
   }
 );
 
-
-// Add these endpoints to your server.js file after the existing endpoints
-
 // GET /api/history - Get completed visits history for current agent with date filtering
 app.get("/api/history", authenticateToken, (req, res) => {
   try {
@@ -2033,44 +2028,29 @@ app.get("/api/history", authenticateToken, (req, res) => {
       queryParams.push(toDate);
     }
 
+    // For both /api/history and /api/history/today, use this query:
     const getHistoryQuery = `
-      SELECT 
-        rr.entry_id,
-        rr.customer_id,
-        tac.customer_name,
-        tac.contact_number1,
-        tac.contact_number2,
-        rr.pt_no,
-        rr.response_text as response,
-        rr.response_description,
-        rr.image_url,
-        rr.response_timestamp as visited_time,
-        rr.response_timestamp as date,
-        rr.no_of_visit,
-        tac.address,
-        tac.city,
-        tac.ornament_name as ornament,
-        tac.loan_created_date as loanCreated,
-        tac.tenure,
-        tac.interest_rate as interest,
-        tac.loan_amount as amount,
-        tac.paid_amount as jama,
-        tac.first_letter_date as letter1,
-        tac.second_letter_date as letter2,
-        tac.final_letter_date as finalLetter,
-        tac.last_date as lastDate,
-        rr.location_coordinates,
-        ep.user_name as agent_name,
-        ep.full_name as agent_full_name
-      FROM tbl_recovery_responses rr
-      INNER JOIN tbl_auction_customers tac ON rr.customer_id = tac.customer_id
-      INNER JOIN tbl_emp_profile ep ON rr.agent_id = ep.entry_id
-      WHERE rr.agent_id = ? 
-        AND rr.pt_no IS NOT NULL
-        ${dateFilter}
-      ORDER BY rr.response_timestamp DESC
-    `;
-
+  SELECT 
+    rr.customer_id,
+    tac.customer_name as name,
+    tac.contact_number1 as number,
+    tac.address,
+    tac.city,
+    rr.pt_no,
+    rr.response_text AS response,
+    rr.response_description,
+    rr.image_url,
+    rr.response_timestamp AS visited_time
+  FROM tbl_recovery_responses rr
+  INNER JOIN tbl_auction_customers tac 
+    ON rr.customer_id = tac.customer_id
+  INNER JOIN tbl_emp_profile ep 
+    ON rr.agent_id = ep.entry_id
+  WHERE rr.agent_id = ?
+    AND rr.pt_no IS NOT NULL
+    ${dateFilter}
+  ORDER BY rr.customer_id, rr.response_timestamp DESC;
+`;
     db.query(getHistoryQuery, queryParams, (err, results) => {
       if (err) {
         console.error("Database error fetching history:", err);
@@ -2130,11 +2110,13 @@ app.get("/api/history", authenticateToken, (req, res) => {
           longitude: longitude,
           agent_name: row.agent_name,
           agent_full_name: row.agent_full_name,
-          isVisited: 1 // Always 1 since we're fetching from recovery_responses
+          isVisited: 1, // Always 1 since we're fetching from recovery_responses
         };
       });
 
-      console.log(`Found ${historyData.length} history records for agent ${agentId}`);
+      console.log(
+        `Found ${historyData.length} history records for agent ${agentId}`
+      );
 
       res.json({
         success: true,
@@ -2142,7 +2124,7 @@ app.get("/api/history", authenticateToken, (req, res) => {
         total: historyData.length,
         fromDate: fromDate,
         toDate: toDate,
-        agentId: agentId
+        agentId: agentId,
       });
     });
   } catch (error) {
@@ -2154,51 +2136,37 @@ app.get("/api/history", authenticateToken, (req, res) => {
   }
 });
 
-// GET /api/history/today - Get today's completed visits for current agent
+// Update your /api/history/today endpoint to match the grouping:
 app.get("/api/history/today", authenticateToken, (req, res) => {
   try {
     const agentId = req.user.userId;
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    const today = new Date().toISOString().split("T")[0];
 
     console.log("Fetching today's history for agent:", agentId);
-    console.log("Today's date:", today);
 
     const getTodayHistoryQuery = `
       SELECT 
-        rr.entry_id,
         rr.customer_id,
-        tac.customer_name,
-        tac.contact_number1,
-        tac.contact_number2,
-        rr.pt_no,
-        rr.response_text as response,
-        rr.response_description,
-        rr.image_url,
-        rr.response_timestamp as visited_time,
-        rr.response_timestamp as date,
-        rr.no_of_visit,
+        tac.customer_name as name,
+        tac.contact_number1 as number,
         tac.address,
         tac.city,
-        tac.ornament_name as ornament,
-        tac.loan_created_date as loanCreated,
-        tac.tenure,
-        tac.interest_rate as interest,
-        tac.loan_amount as amount,
-        tac.paid_amount as jama,
-        tac.first_letter_date as letter1,
-        tac.second_letter_date as letter2,
-        tac.final_letter_date as finalLetter,
-        tac.last_date as lastDate,
-        rr.location_coordinates,
-        ep.user_name as agent_name,
-        ep.full_name as agent_full_name
+        rr.response_text AS response,
+        rr.response_description,
+        rr.image_url,
+        rr.response_timestamp AS visited_time,
+        GROUP_CONCAT(DISTINCT rr.pt_no ORDER BY rr.pt_no SEPARATOR ', ') AS pt_numbers,
+        COUNT(DISTINCT rr.pt_no) AS total_pt_count
       FROM tbl_recovery_responses rr
-      INNER JOIN tbl_auction_customers tac ON rr.customer_id = tac.customer_id
-      INNER JOIN tbl_emp_profile ep ON rr.agent_id = ep.entry_id
-      WHERE rr.agent_id = ? 
+      INNER JOIN tbl_auction_customers tac 
+        ON rr.customer_id = tac.customer_id
+      INNER JOIN tbl_emp_profile ep 
+        ON rr.agent_id = ep.entry_id
+      WHERE rr.agent_id = ?
         AND rr.pt_no IS NOT NULL
         AND DATE(rr.response_timestamp) = ?
-      ORDER BY rr.response_timestamp DESC
+      GROUP BY rr.customer_id, tac.customer_name, tac.contact_number1, tac.address, tac.city, rr.response_text, rr.response_description, rr.image_url, rr.response_timestamp
+      ORDER BY rr.response_timestamp DESC;
     `;
 
     db.query(getTodayHistoryQuery, [agentId, today], (err, results) => {
@@ -2210,12 +2178,11 @@ app.get("/api/history/today", authenticateToken, (req, res) => {
         });
       }
 
-      // Process results to include location data and format response
+      // Process results (same as your existing processing)
       const todayHistoryData = results.map((row) => {
         let latitude = null;
         let longitude = null;
 
-        // Parse location coordinates if available
         if (row.location_coordinates) {
           try {
             const coords = row.location_coordinates;
@@ -2233,45 +2200,33 @@ app.get("/api/history/today", authenticateToken, (req, res) => {
         }
 
         return {
-          id: row.entry_id,
           customer_id: row.customer_id,
-          name: row.customer_name,
-          number: row.contact_number1 || row.contact_number2,
-          pt_no: row.pt_no,
+          name: row.name,
+          number: row.number,
+          address: row.address,
+          city: row.city,
           response: row.response,
           response_description: row.response_description,
           image_url: row.image_url,
           visited_time: row.visited_time,
-          date: row.date,
-          no_of_visit: row.no_of_visit,
-          address: row.address,
-          city: row.city,
-          ornament: row.ornament,
-          loanCreated: row.loanCreated,
-          tenure: row.tenure,
-          interest: row.interest,
-          amount: row.amount,
-          jama: row.jama,
-          letter1: row.letter1,
-          letter2: row.letter2,
-          finalLetter: row.finalLetter,
-          lastDate: row.lastDate,
+          pt_numbers: row.pt_numbers,
+          total_pt_count: row.total_pt_count,
           latitude: latitude,
           longitude: longitude,
-          agent_name: row.agent_name,
-          agent_full_name: row.agent_full_name,
-          isVisited: 1
+          isVisited: 1,
         };
       });
 
-      console.log(`Found ${todayHistoryData.length} today's history records for agent ${agentId}`);
+      console.log(
+        `Found ${todayHistoryData.length} today's history records for agent ${agentId}`
+      );
 
       res.json({
         success: true,
         data: todayHistoryData,
         total: todayHistoryData.length,
         date: today,
-        agentId: agentId
+        agentId: agentId,
       });
     });
   } catch (error) {
@@ -2282,285 +2237,6 @@ app.get("/api/history/today", authenticateToken, (req, res) => {
     });
   }
 });
-
-// GET /api/history/customer/:customerId - Get detailed history for a specific customer
-app.get("/api/history/customer/:customerId", authenticateToken, (req, res) => {
-  try {
-    const agentId = req.user.userId;
-    const customerId = req.params.customerId;
-
-    console.log("Fetching detailed history for customer:", customerId, "by agent:", agentId);
-
-    const getCustomerHistoryQuery = `
-      SELECT 
-        rr.entry_id,
-        rr.customer_id,
-        tac.customer_name,
-        tac.contact_number1,
-        tac.contact_number2,
-        tac.contact_number1 as mobileNumber,
-        tac.email,
-        rr.pt_no,
-        rr.response_text as response,
-        rr.response_description,
-        rr.image_url,
-        rr.response_timestamp as visited_time,
-        rr.response_timestamp as visitDate,
-        rr.no_of_visit,
-        tac.address,
-        tac.city,
-        tac.ornament_name as ornament,
-        tac.loan_created_date as loanCreated,
-        tac.tenure,
-        tac.interest_rate as interest,
-        tac.loan_amount as amount,
-        tac.paid_amount as jama,
-        tac.paid_amount as paidAmount,
-        (tac.loan_amount - tac.paid_amount) as remainingAmount,
-        tac.first_letter_date as letter1,
-        tac.second_letter_date as letter2,
-        tac.final_letter_date as finalLetter,
-        tac.last_date as lastDate,
-        rr.location_coordinates,
-        ep.user_name as agent_name,
-        ep.full_name as agent_full_name,
-        rr.Response1,
-        rr.Response2,
-        rr.notes
-      FROM tbl_recovery_responses rr
-      INNER JOIN tbl_auction_customers tac ON rr.customer_id = tac.customer_id
-      INNER JOIN tbl_emp_profile ep ON rr.agent_id = ep.entry_id
-      WHERE rr.agent_id = ? 
-        AND rr.customer_id = ?
-        AND rr.pt_no IS NOT NULL
-      ORDER BY rr.response_timestamp DESC
-    `;
-
-    db.query(getCustomerHistoryQuery, [agentId, customerId], (err, results) => {
-      if (err) {
-        console.error("Database error fetching customer history:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to fetch customer history data",
-        });
-      }
-
-      if (results.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "No history found for this customer",
-        });
-      }
-
-      // Process the first result for customer details
-      const firstRow = results[0];
-      
-      let latitude = null;
-      let longitude = null;
-
-      // Parse location coordinates if available
-      if (firstRow.location_coordinates) {
-        try {
-          const coords = firstRow.location_coordinates;
-          if (typeof coords === "string" && coords.trim().startsWith("{")) {
-            const locationData = JSON.parse(coords);
-            latitude = locationData.latitude;
-            longitude = locationData.longitude;
-          } else if (typeof coords === "object" && coords !== null) {
-            latitude = coords.latitude;
-            longitude = coords.longitude;
-          }
-        } catch (parseError) {
-          console.error("Error parsing location coordinates:", parseError);
-        }
-      }
-
-      // Group responses by PT number
-      const responsesByPT = {};
-      results.forEach(row => {
-        if (!responsesByPT[row.pt_no]) {
-          responsesByPT[row.pt_no] = [];
-        }
-        responsesByPT[row.pt_no].push({
-          response_id: row.entry_id,
-          response: row.response,
-          response_description: row.response_description,
-          image_url: row.image_url,
-          visited_time: row.visited_time,
-          no_of_visit: row.no_of_visit,
-          agent_name: row.agent_name,
-          agent_full_name: row.agent_full_name
-        });
-      });
-
-      const customerHistory = {
-        customer_id: firstRow.customer_id,
-        name: firstRow.customer_name,
-        number: firstRow.contact_number1 || firstRow.contact_number2,
-        mobileNumber: firstRow.mobileNumber,
-        email: firstRow.email,
-        address: firstRow.address,
-        city: firstRow.city,
-        ornament: firstRow.ornament,
-        loanCreated: firstRow.loanCreated,
-        tenure: firstRow.tenure,
-        interest: firstRow.interest,
-        amount: firstRow.amount,
-        jama: firstRow.jama,
-        paidAmount: firstRow.paidAmount,
-        remainingAmount: firstRow.remainingAmount,
-        letter1: firstRow.letter1,
-        letter2: firstRow.letter2,
-        finalLetter: firstRow.finalLetter,
-        lastDate: firstRow.lastDate,
-        latitude: latitude,
-        longitude: longitude,
-        Response1: firstRow.Response1,
-        Response2: firstRow.Response2,
-        notes: firstRow.notes,
-        isVisited: 1,
-        responses_by_pt: responsesByPT,
-        total_visits: results.length,
-        pt_numbers: Object.keys(responsesByPT)
-      };
-
-      console.log(`Found ${results.length} history records for customer ${customerId}`);
-
-      res.json({
-        success: true,
-        data: customerHistory,
-        total_visits: results.length,
-        total_pt_numbers: Object.keys(responsesByPT).length
-      });
-    });
-  } catch (error) {
-    console.error("Server error fetching customer history:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error while fetching customer history",
-    });
-  }
-});
-
-// GET /api/history/stats - Get history statistics for current agent
-app.get("/api/history/stats", authenticateToken, (req, res) => {
-  try {
-    const agentId = req.user.userId;
-    const { period = 'month' } = req.query; // day, week, month, year
-
-    console.log("Fetching history stats for agent:", agentId, "period:", period);
-
-    let dateFilter = "";
-    let queryParams = [agentId];
-
-    // Set date range based on period
-    const now = new Date();
-    let startDate;
-
-    switch (period) {
-      case 'day':
-        startDate = new Date(now.setHours(0, 0, 0, 0));
-        break;
-      case 'week':
-        startDate = new Date(now.setDate(now.getDate() - 7));
-        break;
-      case 'month':
-        startDate = new Date(now.setMonth(now.getMonth() - 1));
-        break;
-      case 'year':
-        startDate = new Date(now.setFullYear(now.getFullYear() - 1));
-        break;
-      default:
-        startDate = new Date(now.setMonth(now.getMonth() - 1));
-    }
-
-    dateFilter = " AND rr.response_timestamp >= ?";
-    queryParams.push(startDate);
-
-    const getStatsQuery = `
-      SELECT 
-        COUNT(DISTINCT rr.customer_id) as total_customers,
-        COUNT(DISTINCT rr.pt_no) as total_loans,
-        COUNT(rr.entry_id) as total_visits,
-        DATE(rr.response_timestamp) as visit_date,
-        rr.response_text,
-        COUNT(CASE WHEN rr.response_text = 'Positive' THEN 1 END) as positive_responses,
-        COUNT(CASE WHEN rr.response_text = 'Negative' THEN 1 END) as negative_responses,
-        COUNT(CASE WHEN rr.response_text = 'Not Available' THEN 1 END) as not_available_responses,
-        COUNT(CASE WHEN rr.response_text = 'Others' THEN 1 END) as other_responses
-      FROM tbl_recovery_responses rr
-      WHERE rr.agent_id = ? 
-        AND rr.pt_no IS NOT NULL
-        ${dateFilter}
-      GROUP BY DATE(rr.response_timestamp), rr.response_text
-      ORDER BY visit_date DESC
-    `;
-
-    db.query(getStatsQuery, queryParams, (err, results) => {
-      if (err) {
-        console.error("Database error fetching history stats:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to fetch history statistics",
-        });
-      }
-
-      // Calculate totals
-      const totals = {
-        total_customers: 0,
-        total_loans: 0,
-        total_visits: results.reduce((sum, row) => sum + row.total_visits, 0),
-        positive_responses: results.reduce((sum, row) => sum + (row.positive_responses || 0), 0),
-        negative_responses: results.reduce((sum, row) => sum + (row.negative_responses || 0), 0),
-        not_available_responses: results.reduce((sum, row) => sum + (row.not_available_responses || 0), 0),
-        other_responses: results.reduce((sum, row) => sum + (row.other_responses || 0), 0)
-      };
-
-      // Get unique customers and loans
-      const uniqueStatsQuery = `
-        SELECT 
-          COUNT(DISTINCT customer_id) as total_customers,
-          COUNT(DISTINCT pt_no) as total_loans
-        FROM tbl_recovery_responses 
-        WHERE agent_id = ? 
-          AND pt_no IS NOT NULL
-          ${dateFilter}
-      `;
-
-      db.query(uniqueStatsQuery, queryParams, (uniqueErr, uniqueResults) => {
-        if (uniqueErr) {
-          console.error("Database error fetching unique stats:", uniqueErr);
-        } else if (uniqueResults.length > 0) {
-          totals.total_customers = uniqueResults[0].total_customers;
-          totals.total_loans = uniqueResults[0].total_loans;
-        }
-
-        const stats = {
-          period: period,
-          start_date: startDate,
-          end_date: new Date(),
-          totals: totals,
-          daily_breakdown: results
-        };
-
-        console.log(`History stats for agent ${agentId}:`, totals);
-
-        res.json({
-          success: true,
-          data: stats,
-          agentId: agentId
-        });
-      });
-    });
-  } catch (error) {
-    console.error("Server error fetching history stats:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error while fetching history statistics",
-    });
-  }
-});
-
 
 app.listen(PORT, "0.0.0.0", () => {
   logImportant(`Server running on http://localhost:${PORT}`);

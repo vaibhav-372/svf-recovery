@@ -1,14 +1,21 @@
-// History.js - Updated with proper unique keys
-import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Modal,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "tailwind-react-native-classnames";
 import DetailedHist from "./DetailedHist";
 import { useState, useEffect } from "react";
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { useAuth } from '../context/AuthContext';
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { useAuth } from "../context/AuthContext";
 
 const History = () => {
-  const { token, api } = useAuth();
+  const { token } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [filteredData, setFilteredData] = useState([]);
@@ -19,49 +26,84 @@ const History = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [viewMode, setViewMode] = useState('today');
+  const [viewMode, setViewMode] = useState("today");
 
-  // Fetch history data from backend
+  const SERVER_IP = "192.168.65.11";
+  const BASE_URL = `http://${SERVER_IP}:3000`;
+
   const fetchHistoryData = async () => {
     try {
       setError(null);
       setLoading(true);
 
-      let url = '';
+      let url = "";
       let params = {};
 
-      if (viewMode === 'today') {
-        url = '/history/today';
+      if (viewMode === "today") {
+        url = "/api/history/today";
       } else {
-        url = '/history';
+        url = "/api/history";
         params = {
-          fromDate: fromDate.toISOString().split('T')[0],
-          toDate: toDate.toISOString().split('T')[0]
+          fromDate: fromDate.toISOString().split("T")[0],
+          toDate: toDate.toISOString().split("T")[0],
         };
       }
 
-      const response = await api.get(url, { params });
+      const queryString = new URLSearchParams(params).toString();
+      const fullUrl = queryString ? `${url}?${queryString}` : url;
 
-      if (response.data.success) {
-        // Ensure each item has a unique key
-        const dataWithUniqueKeys = response.data.data.map((item, index) => ({
-          ...item,
-          uniqueKey: item.id || `${item.customer_id}_${item.pt_no}_${item.response_timestamp}_${index}`
-        }));
-        setFilteredData(dataWithUniqueKeys);
+      const response = await fetch(`${BASE_URL}${fullUrl}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Group by customer_id to show only one card per customer
+        const customerMap = new Map();
+
+        result.data.forEach((item) => {
+          if (!customerMap.has(item.customer_id)) {
+            customerMap.set(item.customer_id, {
+              ...item,
+              // Store all responses for this customer
+              allResponses: [item],
+              uniqueKey: `customer_${item.customer_id}_${Date.now()}`,
+            });
+          } else {
+            // Add this response to existing customer
+            const existingCustomer = customerMap.get(item.customer_id);
+            existingCustomer.allResponses.push(item);
+          }
+        });
+
+        // Convert map back to array - now we have one entry per customer
+        const processedData = Array.from(customerMap.values());
+
+        console.log(
+          `Grouped ${result.data.length} records into ${processedData.length} customers`
+        );
+        setFilteredData(processedData);
       } else {
-        setError(response.data.message || 'Failed to fetch history data');
+        setError(result.message || "Failed to fetch history data");
       }
     } catch (err) {
-      console.error('Error fetching history data:', err);
-      setError(err.response?.data?.message || 'Network error. Please try again.');
+      console.error("Error fetching history data:", err);
+      setError(err.message || "Network error. Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  // Fetch data on component mount and when filters change
   useEffect(() => {
     if (token) {
       fetchHistoryData();
@@ -93,26 +135,31 @@ const History = () => {
   };
 
   const formatDate = (date) => {
-    return date.toISOString().split('T')[0];
+    return date.toISOString().split("T")[0];
   };
 
   const formatTime = (timeString) => {
-    if (!timeString) return 'N/A';
+    if (!timeString) return "N/A";
     try {
       const date = new Date(timeString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     } catch {
       return timeString;
     }
   };
 
-  // Generate a unique key for each item
+  // Generate a truly unique key for each item
   const getUniqueKey = (person, index) => {
-    // Try to use existing uniqueKey first
+    // Use existing uniqueKey if available
     if (person.uniqueKey) return person.uniqueKey;
-    
-    // Fallback to combination of multiple fields to ensure uniqueness
-    return `${person.customer_id}_${person.pt_no}_${person.response_timestamp}_${index}`;
+
+    // Create a more robust unique key using multiple fields
+    const timestamp =
+      person.response_timestamp || person.visited_time || Date.now();
+    return `${person.customer_id}_${person.pt_no}_${timestamp}_${index}`;
   };
 
   if (!token) {
@@ -134,7 +181,7 @@ const History = () => {
   }
 
   return (
-    <ScrollView 
+    <ScrollView
       style={tw`flex-1 bg-white`}
       refreshControl={
         <RefreshControl
@@ -146,51 +193,63 @@ const History = () => {
     >
       <View style={tw`p-4`}>
         <Text style={tw`text-xl font-bold mb-4`}>Completed Visits History</Text>
-        
+
         {/* View Mode Toggle */}
         <View style={tw`flex-row mb-4`}>
           <TouchableOpacity
             style={[
               tw`flex-1 py-2 rounded-l-lg border`,
-              viewMode === 'today' ? tw`bg-blue-500 border-blue-500` : tw`bg-gray-200 border-gray-300`
+              viewMode === "today"
+                ? tw`bg-blue-500 border-blue-500`
+                : tw`bg-gray-200 border-gray-300`,
             ]}
-            onPress={() => setViewMode('today')}
+            onPress={() => setViewMode("today")}
           >
-            <Text style={[
-              tw`text-center font-semibold`,
-              viewMode === 'today' ? tw`text-white` : tw`text-gray-700`
-            ]}>Today</Text>
+            <Text
+              style={[
+                tw`text-center font-semibold`,
+                viewMode === "today" ? tw`text-white` : tw`text-gray-700`,
+              ]}
+            >
+              Today
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               tw`flex-1 py-2 rounded-r-lg border`,
-              viewMode === 'range' ? tw`bg-blue-500 border-blue-500` : tw`bg-gray-200 border-gray-300`
+              viewMode === "range"
+                ? tw`bg-blue-500 border-blue-500`
+                : tw`bg-gray-200 border-gray-300`,
             ]}
-            onPress={() => setViewMode('range')}
+            onPress={() => setViewMode("range")}
           >
-            <Text style={[
-              tw`text-center font-semibold`,
-              viewMode === 'range' ? tw`text-white` : tw`text-gray-700`
-            ]}>Date Range</Text>
+            <Text
+              style={[
+                tw`text-center font-semibold`,
+                viewMode === "range" ? tw`text-white` : tw`text-gray-700`,
+              ]}
+            >
+              Date Range
+            </Text>
           </TouchableOpacity>
         </View>
-        
+
         {/* Date Range Filter (only show when in range mode) */}
-        {viewMode === 'range' && (
+        {viewMode === "range" && (
           <View style={tw`flex-row justify-between mb-4`}>
             <View style={tw`flex-1 mr-2`}>
               <Text style={tw`text-sm font-semibold mb-1`}>From Date</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={tw`border border-gray-300 rounded-lg p-2`}
                 onPress={() => setShowFromDatePicker(true)}
               >
                 <Text style={tw`text-center`}>{formatDate(fromDate)}</Text>
               </TouchableOpacity>
             </View>
-            
+
             <View style={tw`flex-1 ml-2`}>
               <Text style={tw`text-sm font-semibold mb-1`}>To Date</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={tw`border border-gray-300 rounded-lg p-2`}
                 onPress={() => setShowToDatePicker(true)}
               >
@@ -209,7 +268,7 @@ const History = () => {
             onChange={onFromDateChange}
           />
         )}
-        
+
         {showToDatePicker && (
           <DateTimePicker
             value={toDate}
@@ -223,11 +282,13 @@ const History = () => {
         {error && (
           <View style={tw`bg-red-100 p-3 rounded-lg mb-4`}>
             <Text style={tw`text-red-700 text-center`}>{error}</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={tw`mt-2 bg-red-600 py-2 rounded-lg`}
               onPress={fetchHistoryData}
             >
-              <Text style={tw`text-white text-center font-semibold`}>Retry</Text>
+              <Text style={tw`text-white text-center font-semibold`}>
+                Retry
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -235,9 +296,9 @@ const History = () => {
         {filteredData.length === 0 ? (
           <View style={tw`items-center mt-8`}>
             <Text style={tw`text-center text-gray-500 text-lg`}>
-              {error ? 'Failed to load data' : 'No completed visits found.'}
+              {error ? "Failed to load data" : "No completed visits found."}
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={tw`mt-4 bg-blue-500 px-6 py-2 rounded-lg`}
               onPress={fetchHistoryData}
             >
@@ -245,47 +306,48 @@ const History = () => {
             </TouchableOpacity>
           </View>
         ) : (
-          filteredData.map((person, index) => (
-            <TouchableOpacity 
-              key={getUniqueKey(person, index)} // Use the unique key function
-              onPress={() => handlePress(person)}
-            >
-              <View
-                style={[
-                  tw`bg-white p-4 mb-3 rounded-lg shadow flex flex-row justify-between`,
-                  {
-                    borderLeftWidth: 5,
-                    borderLeftColor: "#7cc0d8",
-                    elevation: 5,
-                  },
-                ]}
+          filteredData.map((person, index) => {
+            // Generate key right before rendering to ensure uniqueness
+            const itemKey =
+              person.uniqueKey ||
+              `history_item_${person.customer_id}_${person.pt_no}_${index}_${Math.random().toString(36).substr(2, 9)}`;
+
+            return (
+              <TouchableOpacity
+                key={itemKey}
+                onPress={() => handlePress(person)}
               >
-                {/* Left Section */}
-                <View style={tw`flex-1`}>
-                  <Text style={tw`text-lg font-bold`}>{person.name}</Text>
-                  <Text style={tw`text-sm text-gray-700 mt-1`}>
-                    {person.number}
-                  </Text>
+                <View
+                  style={[
+                    tw`bg-white p-4 mb-3 rounded-lg shadow flex flex-row justify-between`,
+                    {
+                      borderLeftWidth: 5,
+                      borderLeftColor: "#7cc0d8",
+                      elevation: 5,
+                    },
+                  ]}
+                >
+                  {/* Left Section */}
+                  <View style={tw`flex-1`}>
+                    <Text style={tw`text-lg font-bold`}>{person.name}</Text>
+                    <Text style={tw`text-sm text-gray-700 mt-1`}>
+                      {person.number}
+                    </Text>
+                  </View>
+
+                  {/* Right Section */}
+                  <View style={tw`flex-1 items-end`}>
+                    <Text style={[tw`text-sm `]}>
+                      {person.address || "Completed"}
+                    </Text>
+                    <Text style={tw`text-sm text-gray-700 mt-1`}>
+                      {formatTime(person.visited_time)}
+                    </Text>
+                  </View>
                 </View>
-                
-                {/* Right Section */}
-                <View style={tw`flex-1 items-end`}>
-                  <Text style={[
-                    tw`text-base font-semibold`,
-                    person.response === 'Positive' ? tw`text-green-600` : 
-                    person.response === 'Negative' ? tw`text-red-600` : 
-                    person.response === 'Not Available' ? tw`text-yellow-600` : 
-                    tw`text-blue-600`
-                  ]}>
-                    {person.response || "Completed"}
-                  </Text>
-                  <Text style={tw`text-sm text-gray-700 mt-1`}>
-                    {formatTime(person.visited_time)}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))
+              </TouchableOpacity>
+            );
+          })
         )}
 
         <Modal

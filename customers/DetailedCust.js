@@ -569,25 +569,11 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
         ]}
       >
         {/* Header with Icons */}
-        <View style={tw`flex flex-row justify-between items-center mb-4`}>
-          <TouchableOpacity
-            onPress={handleViewDetails}
-            style={tw`flex-row items-center`}
-            disabled={loadingRelated}
-          >
-            {loadingRelated ? (
-              <ActivityIndicator size="small" color="#7cc0d8" />
-            ) : (
-              <Entypo name="list" size={24} color="#7cc0d8" />
-            )}
-            <Text
-              style={[
-                tw`ml-1 text-sm`,
-                loadingRelated ? tw`text-gray-500` : tw`text-blue-500`,
-              ]}
-            >
-              {loadingRelated ? "Loading..." : "View All Loans"}
-            </Text>
+        <View style={tw`flex flex-row justify-end mb-4`}>
+
+          {/* Close Button (X) in top right */}
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={28} color="#ef4444" />
           </TouchableOpacity>
         </View>
 
@@ -813,20 +799,27 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           <View style={tw`mb-32`} />
         </ScrollView>
 
-        {/* Bottom Buttons */}
         <View
           style={tw`absolute bottom-5 left-4 right-4 flex-row justify-between`}
         >
           <Pressable
-            onPress={onClose}
+            onPress={handleViewDetails}
+            disabled={loadingRelated}
             style={[
               tw`rounded-full px-8 py-3 flex-1 mr-2`,
-              { backgroundColor: "#ef4444" },
+              {
+                backgroundColor: loadingRelated ? "#9ca3af" : "#7cc0d8",
+                opacity: loadingRelated ? 0.6 : 1,
+              },
             ]}
           >
-            <Text style={tw`text-white text-lg font-bold text-center`}>
-              Close
-            </Text>
+            {loadingRelated ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={tw`text-white text-lg font-bold text-center`}>
+                View All Loans
+              </Text>
+            )}
           </Pressable>
 
           {!isAlreadyVisited ? (
@@ -845,13 +838,11 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : isSaveEnabled ? (
                 <Text style={tw`text-white text-lg font-bold text-center`}>
-                  {" "}
-                  Save{" "}
+                  Save
                 </Text>
               ) : (
                 <Text style={tw`text-white text-base font-bold text-center`}>
-                  {" "}
-                  Complete Steps{" "}
+                  Complete Steps
                 </Text>
               )}
             </Pressable>
@@ -871,13 +862,11 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : isSaveEnabled ? (
                 <Text style={tw`text-white text-lg font-bold text-center`}>
-                  {" "}
-                  Update{" "}
+                  Update
                 </Text>
               ) : (
                 <Text style={tw`text-white text-base font-bold text-center`}>
-                  {" "}
-                  Complete Steps{" "}
+                  Complete Steps
                 </Text>
               )}
             </Pressable>

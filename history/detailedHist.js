@@ -14,10 +14,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import tw from "tailwind-react-native-classnames";
-import axios from "axios";
 
 const { height } = Dimensions.get("window");
-const API_BASE_URL = "https://your-backend-api.com/api"; // Replace with your actual API URL
 
 const DetailedHist = ({ person, onClose }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -41,10 +39,10 @@ const DetailedHist = ({ person, onClose }) => {
     ]).start();
   }, []);
 
-  const handleResponseImagePress = async (responseType) => {
-    if (person[responseType]) {
+  const handleResponseImagePress = async (imageUrl) => {
+    if (imageUrl) {
       setImageLoading(true);
-      setSelectedResponseImage(person[responseType]);
+      setSelectedResponseImage(imageUrl);
       setResponseImageVisible(true);
       setImageLoading(false);
     }
@@ -73,7 +71,37 @@ const DetailedHist = ({ person, onClose }) => {
     }
   };
 
+  // Group PT numbers by response
+  const groupPTsByResponse = () => {
+    if (!person || !person.allResponses) return [];
+    
+    const responseGroups = {};
+    
+    person.allResponses.forEach((response) => {
+      const ptNo = response.pt_no || response.pt_numbers;
+      const responseType = response.response || "No Response";
+      
+      if (!responseGroups[responseType]) {
+        responseGroups[responseType] = {
+          response: responseType,
+          ptNumbers: [],
+          description: response.response_description,
+          image_url: response.image_url,
+          visited_time: response.visited_time
+        };
+      }
+      
+      if (ptNo && !responseGroups[responseType].ptNumbers.includes(ptNo)) {
+        responseGroups[responseType].ptNumbers.push(ptNo);
+      }
+    });
+    
+    return Object.values(responseGroups);
+  };
+
   if (!person) return null;
+
+  const responseGroups = groupPTsByResponse();
 
   return (
     <Animated.View
@@ -94,6 +122,13 @@ const DetailedHist = ({ person, onClose }) => {
           { paddingTop: 40 },
         ]}
       >
+        <View style={tw`flex flex-row justify-end mb-4`}>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={28} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
+        
+        {/* Only show name at top */}
         <Text
           style={[
             tw`text-center text-3xl font-bold mb-6`,
@@ -104,68 +139,117 @@ const DetailedHist = ({ person, onClose }) => {
         </Text>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Make sure each InfoRow has a unique key */}
-          <InfoRow key="mobile" label="Mobile Number" value={person?.number} />
           <InfoRow key="city" label="City" value={person?.city} />
           <InfoRow key="address" label="Address" value={person?.address} />
-          <InfoRow key="pt_no" label="PT Number" value={person?.pt_no} />
-          <InfoRow
-            key="visit_date"
-            label="Visit Date"
-            value={person?.visitDate}
-          />
-          <InfoRow
-            key="visited_time"
-            label="Visited Time"
-            value={formatTime(person?.visited_time)}
-          />
-          <InfoRow key="response" label="Response" value={person?.response} />
-          <InfoRow key="amount" label="Loan Amount" value={person?.amount} />
-          <InfoRow key="paid" label="Amount Paid" value={person?.jama} />
-          <InfoRow
-            key="loan_created"
-            label="Loan Created"
-            value={person?.loanCreated}
-          />
-          <InfoRow key="tenure" label="Tenure" value={person?.tenure} />
-          <InfoRow key="interest" label="Interest" value={person?.interest} />
-          <InfoRow key="ornament" label="Ornament" value={person?.ornament} />
-          <InfoRow key="letter1" label="1st Letter" value={person?.letter1} />
-          <InfoRow key="letter2" label="2nd Letter" value={person?.letter2} />
-          <InfoRow
-            key="final_letter"
-            label="Final Letter"
-            value={person?.finalLetter}
-          />
-          <InfoRow key="last_date" label="Last Date" value={person?.lastDate} />
+          
+          {/* Show PT numbers grouped by response */}
+          {responseGroups.map((group, index) => (
+            <View key={index} style={tw`mb-4`}>
+              {/* PT Numbers on left */}
+              <View
+                style={[
+                  tw`flex-row justify-between border-b py-3`,
+                  { borderBottomColor: "#e5e7eb" },
+                ]}
+              >
+                <Text style={tw`text-base font-semibold text-gray-800 flex-1`}>
+                  PT Number(s)
+                </Text>
+                <View style={tw`flex-1 items-end`}>
+                  <Text style={tw`text-base text-gray-700 text-right`}>
+                    {group.ptNumbers.join(', ')}
+                  </Text>
+                </View>
+              </View>
 
-          {/* Response Images */}
-          <ResponseImageRow
-            key="response1"
-            label="Response 1 Image"
-            value={person?.Response1}
-            onPress={() => handleResponseImagePress("Response1")}
-          />
-          <ResponseImageRow
-            key="response2"
-            label="Response 2 Image"
-            value={person?.Response2}
-            onPress={() => handleResponseImagePress("Response2")}
-          />
+              {/* Response on right */}
+              <View
+                style={[
+                  tw`flex-row justify-between border-b py-3`,
+                  { borderBottomColor: "#e5e7eb" },
+                ]}
+              >
+                <Text style={tw`text-base font-semibold text-gray-800 flex-1`}>
+                  Response
+                </Text>
+                <Text style={tw`text-base text-gray-700 flex-1 text-right`}>
+                  {group.response || "N/A"}
+                </Text>
+              </View>
 
-          <View style={tw`mt-6 mb-10`}>
-            <Pressable
-              onPress={onClose}
-              style={[
-                tw`self-center rounded-full px-10 py-3`,
-                { backgroundColor: "#7cc0d8" },
-              ]}
-            >
-              <Text style={tw`text-white text-lg font-bold`}>Close</Text>
-            </Pressable>
-          </View>
+              {/* Response Description if available */}
+              {group.description && (
+                <View
+                  style={[
+                    tw`flex-row justify-between border-b py-3`,
+                    { borderBottomColor: "#e5e7eb" },
+                  ]}
+                >
+                  <Text style={tw`text-base font-semibold text-gray-800 flex-1`}>
+                    Description
+                  </Text>
+                  <Text style={tw`text-base text-gray-700 flex-1 text-right`}>
+                    {group.description}
+                  </Text>
+                </View>
+              )}
+
+              {/* Response Image for this group */}
+              {group.image_url && (
+                <ResponseImageRow
+                  label="Response Image"
+                  value={group.image_url}
+                  onPress={() => handleResponseImagePress(group.image_url)}
+                />
+              )}
+            </View>
+          ))}
+
+          {/* Visit Date and Time (show from first response) */}
+          {responseGroups.length > 0 && (
+            <>
+              <InfoRow
+                key="visit_date"
+                label="Visit Date"
+                value={formatDate(responseGroups[0].visited_time)}
+              />
+              <InfoRow
+                key="visited_time"
+                label="Visited Time"
+                value={formatTime(responseGroups[0].visited_time)}
+              />
+            </>
+          )}
         </ScrollView>
       </View>
+
+      {/* Image Viewing Modal */}
+      <Modal
+        visible={responseImageVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setResponseImageVisible(false)}
+      >
+        <View style={tw`flex-1 bg-black bg-opacity-90 justify-center items-center`}>
+          {imageLoading ? (
+            <ActivityIndicator size="large" color="#ffffff" />
+          ) : (
+            <>
+              <TouchableOpacity
+                style={tw`absolute top-10 right-5 z-10`}
+                onPress={() => setResponseImageVisible(false)}
+              >
+                <Ionicons name="close" size={30} color="#ffffff" />
+              </TouchableOpacity>
+              <Image
+                source={{ uri: selectedResponseImage }}
+                style={tw`w-full h-2/3`}
+                resizeMode="contain"
+              />
+            </>
+          )}
+        </View>
+      </Modal>
     </Animated.View>
   );
 };

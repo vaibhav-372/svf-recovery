@@ -45,13 +45,11 @@ const Home = () => {
   };
 
   const handleHistoryPress = () => {
-    // Add navigation for History List if needed
-    console.log("History List pressed");
+    navigation.navigate("Hist")
   };
 
   const handleSettingsPress = () => {
-    // Add navigation for Settings if needed
-    console.log("Settings pressed");
+    navigation.navigate("Settings")
   };
 
   // Card data with handlers
