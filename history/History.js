@@ -67,30 +67,47 @@ const History = () => {
       const result = await response.json();
 
       if (result.success) {
+        console.log("Raw API response:", result.data[0]); // Debug log
+
         // Group by customer_id to show only one card per customer
         const customerMap = new Map();
 
         result.data.forEach((item) => {
           if (!customerMap.has(item.customer_id)) {
             customerMap.set(item.customer_id, {
-              ...item,
+              customer_id: item.customer_id,
+              name: item.name || item.customer_name,
+              number: item.number || item.contact_number1,
+              address: item.address,
+              city: item.city,
               // Store all responses for this customer
               allResponses: [item],
+              // Use the latest visited_time
+              visited_time: item.visited_time,
               uniqueKey: `customer_${item.customer_id}_${Date.now()}`,
             });
           } else {
             // Add this response to existing customer
             const existingCustomer = customerMap.get(item.customer_id);
             existingCustomer.allResponses.push(item);
+            // Update to latest visited_time
+            if (
+              new Date(item.visited_time) >
+              new Date(existingCustomer.visited_time)
+            ) {
+              existingCustomer.visited_time = item.visited_time;
+            }
           }
         });
 
         // Convert map back to array - now we have one entry per customer
         const processedData = Array.from(customerMap.values());
 
-        console.log(
-          `Grouped ${result.data.length} records into ${processedData.length} customers`
-        );
+        console
+          .log
+          // `Grouped ${result.data.length} records into ${processedData.length} customers`
+          ();
+        console.log("Processed customer data:", processedData[0]);
         setFilteredData(processedData);
       } else {
         setError(result.message || "Failed to fetch history data");
@@ -149,17 +166,6 @@ const History = () => {
     } catch {
       return timeString;
     }
-  };
-
-  // Generate a truly unique key for each item
-  const getUniqueKey = (person, index) => {
-    // Use existing uniqueKey if available
-    if (person.uniqueKey) return person.uniqueKey;
-
-    // Create a more robust unique key using multiple fields
-    const timestamp =
-      person.response_timestamp || person.visited_time || Date.now();
-    return `${person.customer_id}_${person.pt_no}_${timestamp}_${index}`;
   };
 
   if (!token) {
@@ -307,10 +313,8 @@ const History = () => {
           </View>
         ) : (
           filteredData.map((person, index) => {
-            // Generate key right before rendering to ensure uniqueness
             const itemKey =
-              person.uniqueKey ||
-              `history_item_${person.customer_id}_${person.pt_no}_${index}_${Math.random().toString(36).substr(2, 9)}`;
+              person.uniqueKey || `history_item_${person.customer_id}_${index}`;
 
             return (
               <TouchableOpacity
@@ -329,18 +333,25 @@ const History = () => {
                 >
                   {/* Left Section */}
                   <View style={tw`flex-1`}>
-                    <Text style={tw`text-lg font-bold`}>{person.name}</Text>
+                    <Text style={tw`text-lg font-bold`}>
+                      {person.name ||
+                        person.customer_name ||
+                        "Unknown Customer"}
+                    </Text>
                     <Text style={tw`text-sm text-gray-700 mt-1`}>
-                      {person.number}
+                      {person.number || person.contact_number1 || "No Number"}
+                    </Text>
+                    <Text style={tw`text-xs text-gray-500 mt-1`}>
+                      {person.allResponses?.length || 0} PT number(s)
                     </Text>
                   </View>
 
                   {/* Right Section */}
                   <View style={tw`flex-1 items-end`}>
-                    <Text style={[tw`text-sm `]}>
-                      {person.address || "Completed"}
+                    <Text style={tw`text-sm text-gray-700 text-right`}>
+                      {person.address ? person.address : "Completed"}
                     </Text>
-                    <Text style={tw`text-sm text-gray-700 mt-1`}>
+                    <Text style={tw`text-sm text-gray-700 mt-3 font-bold`}>
                       {formatTime(person.visited_time)}
                     </Text>
                   </View>

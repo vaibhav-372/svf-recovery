@@ -2065,6 +2065,8 @@ app.get("/api/history", authenticateToken, (req, res) => {
         let latitude = null;
         let longitude = null;
 
+        // logImportant(`row data.... ${row.image_url}`);
+
         // Parse location coordinates if available
         if (row.location_coordinates) {
           try {
@@ -2085,8 +2087,8 @@ app.get("/api/history", authenticateToken, (req, res) => {
         return {
           id: row.entry_id,
           customer_id: row.customer_id,
-          name: row.customer_name,
-          number: row.contact_number1 || row.contact_number2,
+          name: row.name,
+          number: row.number || row.contact_number2,
           pt_no: row.pt_no,
           response: row.response,
           response_description: row.response_description,
@@ -2096,18 +2098,6 @@ app.get("/api/history", authenticateToken, (req, res) => {
           no_of_visit: row.no_of_visit,
           address: row.address,
           city: row.city,
-          ornament: row.ornament,
-          loanCreated: row.loanCreated,
-          tenure: row.tenure,
-          interest: row.interest,
-          amount: row.amount,
-          jama: row.jama,
-          letter1: row.letter1,
-          letter2: row.letter2,
-          finalLetter: row.finalLetter,
-          lastDate: row.lastDate,
-          latitude: latitude,
-          longitude: longitude,
           agent_name: row.agent_name,
           agent_full_name: row.agent_full_name,
           isVisited: 1, // Always 1 since we're fetching from recovery_responses
