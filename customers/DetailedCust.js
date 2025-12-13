@@ -98,7 +98,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
       setCheckingExisting(true);
 
       const response = await fetch(
-        `${BASE_URL}/api/get-existing-responses/${customerId}`,
+        `${BASE_URL}/api/customers/api/get-existing-responses/${customerId}`,
         {
           method: "GET",
           headers: {
