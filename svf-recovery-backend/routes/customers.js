@@ -256,7 +256,7 @@ router.get(
 
 // GET /api/get-existing-responses/:customerId - Get existing responses for all PT numbers
 router.get(
-  "/api/customers/api/get-existing-responses/:customerId",
+  "/api/get-existing-responses/:customerId",
   authenticateToken,
   async (req, res) => {
     try {
