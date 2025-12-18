@@ -11,6 +11,7 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import tw from "tailwind-react-native-classnames";
 
@@ -22,6 +23,7 @@ const DetailedHist = ({ person, onClose }) => {
   const [responseImageVisible, setResponseImageVisible] = useState(false);
   const [selectedResponseImage, setSelectedResponseImage] = useState(null);
   const [imageLoading, setImageLoading] = useState(false);
+  const [responseGroups, setResponseGroups] = useState([]);
 
   useEffect(() => {
     Animated.parallel([
@@ -36,27 +38,93 @@ const DetailedHist = ({ person, onClose }) => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+
+    // Process responses when component mounts
+    processResponses();
+  }, [person]);
+
+  const processResponses = () => {
+    if (!person) return;
+
+    // Try to get responses from different possible properties
+    const responses = 
+      person.allResponses || 
+      person.previousResponses || 
+      person.responses || 
+      (person.image_url ? [person] : []); // If single response with image_url
+
+    const responseGroups = {};
+
+    responses.forEach((response) => {
+      // Get PT number from various possible fields
+      const ptNo = 
+        response.pt_no || 
+        response.pt_numbers || 
+        response.customer_id || 
+        person.pt_no ||
+        "Unknown";
+      
+      // Get response type
+      const responseType = 
+        response.response || 
+        response.response_text || 
+        response.response_type ||
+        "No Response";
+      
+      // Get image URL
+      const imageUrl = response.image_url;
+
+      if (!responseGroups[responseType]) {
+        responseGroups[responseType] = {
+          response: responseType,
+          ptNumbers: [],
+          description: response.response_description || "",
+          image_url: imageUrl,
+          visited_time: response.visited_time || response.response_timestamp,
+        };
+      }
+
+      if (ptNo && !responseGroups[responseType].ptNumbers.includes(ptNo)) {
+        responseGroups[responseType].ptNumbers.push(ptNo);
+      }
+
+      // If this response has an image and the group doesn't have one, add it
+      if (imageUrl && !responseGroups[responseType].image_url) {
+        responseGroups[responseType].image_url = imageUrl;
+      }
+    });
+
+    setResponseGroups(Object.values(responseGroups));
+  };
 
   const handleResponseImagePress = async (imageUrl) => {
-    if (imageUrl) {
-      setImageLoading(true);
+    if (!imageUrl) {
+      Alert.alert("No Image", "No image available for this response");
+      return;
+    }
 
+    setImageLoading(true);
+
+    try {
       // Construct full image URL
       let fullImageUrl = imageUrl;
+      
+      // If imageUrl doesn't start with http, prepend the server URL
       if (!imageUrl.startsWith("http")) {
-        // Add your backend base URL here
-        // const SERVER_IP = "192.168.65.11"; // Replace with your actual server IP
-        // const BASE_URL = `http://${SERVER_IP}:3000`;
-        const BASE_URL = `./svf-recovery-backend`;
-        fullImageUrl = imageUrl.startsWith("/")
-          ? `${BASE_URL}${imageUrl}`
-          : `${BASE_URL}/${imageUrl}`;
+        // Remove leading slash if present
+        const cleanImageUrl = imageUrl.startsWith("/") ? imageUrl.substring(1) : imageUrl;
+        // Use the correct server IP from your DetailedCust.js
+        const SERVER_IP = "192.168.65.11";
+        fullImageUrl = `http://${SERVER_IP}:3000/${cleanImageUrl}`;
       }
 
       console.log("Loading image from:", fullImageUrl);
       setSelectedResponseImage(fullImageUrl);
       setResponseImageVisible(true);
+    } catch (error) {
+      console.error("Error constructing image URL:", error);
+      Alert.alert("Error", "Failed to load image");
+    } finally {
       setImageLoading(false);
     }
   };
@@ -84,43 +152,7 @@ const DetailedHist = ({ person, onClose }) => {
     }
   };
 
-  // Group PT numbers by response
-  const groupPTsByResponse = () => {
-    if (!person || !person.allResponses) return [];
-
-    // console.log("All responses for grouping:", person.allResponses);
-
-    const responseGroups = {};
-
-    person.allResponses.forEach((response) => {
-      // Get PT number from various possible fields
-      const ptNo =
-        response.pt_no || response.pt_numbers || response.customer_id;
-      const responseType =
-        response.response || response.response_text || "No Response";
-
-      if (!responseGroups[responseType]) {
-        responseGroups[responseType] = {
-          response: responseType,
-          ptNumbers: [],
-          description: response.response_description,
-          image_url: response.image_url,
-          visited_time: response.visited_time,
-        };
-      }
-
-      if (ptNo && !responseGroups[responseType].ptNumbers.includes(ptNo)) {
-        responseGroups[responseType].ptNumbers.push(ptNo);
-      }
-    });
-
-    return Object.values(responseGroups);
-  };
-
   if (!person) return null;
-
-  const responseGroups = groupPTsByResponse();
-  // console.log("Grouped responses:", responseGroups);
 
   return (
     <Animated.View
@@ -152,16 +184,16 @@ const DetailedHist = ({ person, onClose }) => {
           <Text
             style={[tw`text-center text-3xl font-bold`, { color: "#7cc0d8" }]}
           >
-            {person?.name || person?.customer_name || "Customer Details"}
+            {person.name || person.customer_name || "Customer Details"}
           </Text>
           <Text style={tw`text-center text-lg text-gray-600 mt-2`}>
-            {person?.number || person?.contact_number1 || "No Number"}
+            {person.number || person.contact_number1 || "No Number"}
           </Text>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          <InfoRow key="city" label="City" value={person?.city} />
-          <InfoRow key="address" label="Address" value={person?.address} />
+          <InfoRow key="city" label="City" value={person.city} />
+          <InfoRow key="address" label="Address" value={person.address} />
 
           {/* Show PT numbers grouped by response */}
           {responseGroups.length > 0 ? (
@@ -170,7 +202,7 @@ const DetailedHist = ({ person, onClose }) => {
                 key={index}
                 style={tw`mb-4 border border-gray-200 rounded-lg p-3`}
               >
-                {/* PT Numbers on left */}
+                {/* PT Numbers */}
                 <View style={[tw`flex-row justify-between py-2`]}>
                   <Text
                     style={tw`text-base font-semibold text-gray-800 flex-1`}
@@ -179,12 +211,14 @@ const DetailedHist = ({ person, onClose }) => {
                   </Text>
                   <View style={tw`flex-1 items-end`}>
                     <Text style={tw`text-base text-gray-700 text-right`}>
-                      {group.ptNumbers.join(", ") || "N/A"}
+                      {group.ptNumbers.length > 0 
+                        ? group.ptNumbers.join(", ")
+                        : "N/A"}
                     </Text>
                   </View>
                 </View>
 
-                {/* Response on right */}
+                {/* Response */}
                 <View style={[tw`flex-row justify-between py-2`]}>
                   <Text
                     style={tw`text-base font-semibold text-gray-800 flex-1`}
@@ -197,7 +231,7 @@ const DetailedHist = ({ person, onClose }) => {
                 </View>
 
                 {/* Response Description if available */}
-                {group.description && (
+                {group.description && group.description.trim() && (
                   <View style={[tw`flex-row justify-between py-2`]}>
                     <Text
                       style={tw`text-base font-semibold text-gray-800 flex-1`}
@@ -210,6 +244,7 @@ const DetailedHist = ({ person, onClose }) => {
                   </View>
                 )}
 
+                {/* Image if available */}
                 {group.image_url && (
                   <ResponseImageRow
                     label="Response Image"
@@ -217,25 +252,44 @@ const DetailedHist = ({ person, onClose }) => {
                     onPress={() => handleResponseImagePress(group.image_url)}
                   />
                 )}
+
+                {/* Visit time if available */}
+                {group.visited_time && (
+                  <View style={[tw`flex-row justify-between py-2`]}>
+                    <Text
+                      style={tw`text-base font-semibold text-gray-800 flex-1`}
+                    >
+                      Visited On
+                    </Text>
+                    <Text style={tw`text-base text-gray-700 flex-1 text-right`}>
+                      {formatDate(group.visited_time)} at{" "}
+                      {formatTime(group.visited_time)}
+                    </Text>
+                  </View>
+                )}
               </View>
             ))
           ) : (
             <Text style={tw`text-center text-gray-500 py-4`}>
-              No PT numbers found for this customer
+              No response data found for this customer
             </Text>
           )}
 
-          {/* Visit Date and Time */}
-          <InfoRow
-            key="visit_date"
-            label="Visit Date"
-            value={formatDate(person.visited_time)}
-          />
-          <InfoRow
-            key="visited_time"
-            label="Visited Time"
-            value={formatTime(person.visited_time)}
-          />
+          {/* Main Visit Date and Time (from person object) */}
+          {person.visited_time && (
+            <>
+              <InfoRow
+                key="visit_date"
+                label="Visit Date"
+                value={formatDate(person.visited_time)}
+              />
+              <InfoRow
+                key="visited_time"
+                label="Visited Time"
+                value={formatTime(person.visited_time)}
+              />
+            </>
+          )}
         </ScrollView>
       </View>
 
@@ -259,19 +313,26 @@ const DetailedHist = ({ person, onClose }) => {
               >
                 <Ionicons name="close" size={30} color="#ffffff" />
               </TouchableOpacity>
-              <Image
-                source={{ uri: selectedResponseImage }}
-                style={tw`w-full h-2/3`}
-                resizeMode="contain"
-                onLoadStart={() => setImageLoading(true)}
-                onLoadEnd={() => setImageLoading(false)}
-                onError={(error) => {
-                  console.log("Image loading error:", error.nativeEvent.error);
-                  setImageLoading(false);
-                  Alert.alert("Error", "Failed to load image");
-                  setResponseImageVisible(false);
-                }}
-              />
+              {selectedResponseImage ? (
+                <Image
+                  source={{ uri: selectedResponseImage }}
+                  style={tw`w-full h-2/3`}
+                  resizeMode="contain"
+                  onLoadStart={() => setImageLoading(true)}
+                  onLoadEnd={() => setImageLoading(false)}
+                  onError={(error) => {
+                    console.log(
+                      "Image loading error:",
+                      error.nativeEvent?.error
+                    );
+                    setImageLoading(false);
+                    Alert.alert("Error", "Failed to load image");
+                    setResponseImageVisible(false);
+                  }}
+                />
+              ) : (
+                <Text style={tw`text-white text-lg`}>No image available</Text>
+              )}
             </>
           )}
         </View>

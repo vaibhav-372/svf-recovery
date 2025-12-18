@@ -31,10 +31,11 @@ const LoadingScreen = () => (
       source={require("./assets/kohli.webp")}
       style={{ width: 140, height: 140, borderRadius: 50, marginBottom: 20 }}
     />
-    <ActivityIndicator size="large" color="#7cc0d8" />
+    <Text style={{ fontSize: 20, fontWeight: "bold", color: "#7cc0d8" }}>SVF RECOVERY</Text>
+    {/* <ActivityIndicator size="large" color="#7cc0d8" />
     <Text style={{ marginTop: 10, color: "#7cc0d8", fontSize: 16 }}>
       Loading...
-    </Text>
+    </Text> */}
   </View>
 );
 

@@ -218,14 +218,42 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Configure multer for file uploads
+// const storage = multer.diskStorage({
+//   destination: function (req, file, cb) {
+//     cb(null, uploadsDir);
+//   },
+//   filename: function (req, file, cb) {
+//     // Use temporary filename, will be renamed in the upload endpoint
+//     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+//     cb(null, "temp-" + uniqueSuffix + path.extname(file.originalname));
+//   },
+// });
+
+// Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
-    // Use temporary filename, will be renamed in the upload endpoint
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, "temp-" + uniqueSuffix + path.extname(file.originalname));
+    // Generate final filename directly
+    const { customer_id } = req.body;
+    const agentId = req.user?.userId || "unknown";
+    const today = new Date();
+    const dateString = today.toISOString().split("T")[0]; // YYYY-MM-DD format
+
+    // Get agent name from database or use timestamp as fallback
+    if (req.user?.userId && customer_id) {
+      // We'll handle the agent name lookup in the upload endpoint
+      // For now, use a placeholder that will be replaced later
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const safeCustomerId = customer_id.replace(/[^a-zA-Z0-9]/g, "-");
+      const safeExt = path.extname(file.originalname).toLowerCase();
+      cb(null, `upload-${safeCustomerId}-${uniqueSuffix}${safeExt}`);
+    } else {
+      // Fallback if we don't have customer_id yet
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, "upload-" + uniqueSuffix + path.extname(file.originalname));
+    }
   },
 });
 
@@ -329,8 +357,8 @@ app.get("/api/health", (req, res) => {
 // Add this before your upload endpoint
 app.use("/api/upload-image", (req, res, next) => {
   const contentLength = parseInt(req.headers["content-length"] || "0");
-  if (contentLength > 10 * 1024 * 1024) {
-    // 10MB limit for upload
+  if (contentLength > 1 * 1024 * 1024) {
+    // 1MB limit for upload
     return res.status(413).json({
       success: false,
       message: "Request body too large",
@@ -356,18 +384,29 @@ app.post(
       const { customer_id, pt_no } = req.body;
 
       if (!customer_id) {
+        // Delete the uploaded file if validation fails
+        fs.unlink(req.file.path, (unlinkErr) => {
+          if (unlinkErr)
+            console.error("Error deleting invalid file:", unlinkErr);
+        });
+
         return res.status(400).json({
           success: false,
           message: "Customer ID is required",
         });
       }
 
-      // Check file size - ASYNC VERSION
+      // Check file size
       const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB in bytes
 
       fs.stat(req.file.path, (statErr, stats) => {
         if (statErr) {
           console.error("Error getting file stats:", statErr);
+          // Delete the file on error
+          fs.unlink(req.file.path, (unlinkErr) => {
+            if (unlinkErr)
+              console.error("Error deleting temp file:", unlinkErr);
+          });
           return res.status(500).json({
             success: false,
             message: "Error processing file",
@@ -375,17 +414,15 @@ app.post(
         }
 
         if (stats.size > MAX_FILE_SIZE) {
-          // Delete the temporary file ASYNC
+          // Delete the oversized file
           fs.unlink(req.file.path, (unlinkErr) => {
-            if (unlinkErr) {
-              console.error("Error deleting temp file:", unlinkErr);
-            }
-            return res.status(400).json({
-              success: false,
-              message: `File size too large. Maximum allowed is 1MB. Current size: ${(stats.size / (1024 * 1024)).toFixed(2)}MB`,
-            });
+            if (unlinkErr)
+              console.error("Error deleting oversized file:", unlinkErr);
           });
-          return; // Important: return here
+          return res.status(400).json({
+            success: false,
+            message: `File size too large. Maximum allowed is 1MB. Current size: ${(stats.size / (1024 * 1024)).toFixed(2)}MB`,
+          });
         }
 
         console.log(
@@ -401,6 +438,10 @@ app.post(
           .execute(getAgentQuery, [agentId])
           .then((agentResults) => {
             if (agentResults.length === 0) {
+              // Delete file if agent not found
+              fs.unlink(req.file.path, (unlinkErr) => {
+                if (unlinkErr) console.error("Error deleting file:", unlinkErr);
+              });
               return res.status(404).json({
                 success: false,
                 message: "Agent not found",
@@ -409,48 +450,77 @@ app.post(
 
             const agentName = agentResults[0].user_name;
 
-            // Generate filename with format: pt_no-agentname-todayDate
+            // Generate final filename with format: customerId-agentName-date-timestamp
             const today = new Date();
-            const dateString = today.toISOString().split("T")[0]; // YYYY-MM-DD format
+            const dateString = today.toISOString().split("T")[0];
+            const timestamp = Date.now();
 
-            let filename;
-            if (pt_no) {
-              // Use pt_no-agentname-date format
-              filename = `${pt_no}-${agentName}-${dateString}${path.extname(req.file.originalname)}`;
-            } else {
-              // Fallback to customer_id if pt_no not available
-              filename = `${customer_id}-${agentName}-${dateString}${path.extname(req.file.originalname)}`;
-            }
+            // Clean up agent name for filename
+            const safeAgentName = agentName.replace(/[^a-zA-Z0-9]/g, "-");
+            const safeCustomerId = customer_id.replace(/[^a-zA-Z0-9]/g, "-");
 
-            // Clean filename (remove special characters)
-            const cleanFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
+            // Create unique filename to handle multiple images per customer per day
+            const uniqueId = Math.random().toString(36).substring(2, 15);
+            const fileExt = path.extname(req.file.originalname).toLowerCase();
 
-            // Rename the file with the new filename
-            const oldPath = req.file.path;
-            const newPath = path.join(uploadsDir, cleanFilename);
+            const finalFilename = `${safeCustomerId}-${safeAgentName}-${dateString}-${timestamp}-${uniqueId}${fileExt}`;
 
-            fs.rename(oldPath, newPath, (err) => {
-              if (err) {
-                console.error("Error renaming file:", err);
+            // Get current filename and path
+            const currentPath = req.file.path;
+            const currentFilename = req.file.filename;
+            const newPath = path.join(uploadsDir, finalFilename);
+
+            // Rename the file to final filename
+            fs.rename(currentPath, newPath, (renameErr) => {
+              if (renameErr) {
+                console.error("Error renaming file:", renameErr);
+                // Delete the file if rename fails
+                fs.unlink(currentPath, (unlinkErr) => {
+                  if (unlinkErr)
+                    console.error(
+                      "Error deleting file after rename error:",
+                      unlinkErr
+                    );
+                });
                 return res.status(500).json({
                   success: false,
                   message: "Error saving image file",
                 });
               }
 
-              const imageUrl = `/uploads/${cleanFilename}`;
-              console.log("Image uploaded successfully:", imageUrl);
+              const imageUrl = `/uploads/${finalFilename}`;
+              console.log("Image uploaded and saved successfully:", imageUrl);
 
               res.json({
                 success: true,
                 message: "Image uploaded successfully",
                 image_url: imageUrl,
-                filename: cleanFilename,
+                filename: finalFilename,
               });
+            });
+          })
+          .catch((dbError) => {
+            // Delete file on database error
+            fs.unlink(req.file.path, (unlinkErr) => {
+              if (unlinkErr)
+                console.error("Error deleting file on DB error:", unlinkErr);
+            });
+            console.error("Database error fetching agent:", dbError);
+            res.status(500).json({
+              success: false,
+              message: "Error processing upload",
             });
           });
       });
     } catch (error) {
+      // Delete file on general error
+      if (req.file && req.file.path) {
+        fs.unlink(req.file.path, (unlinkErr) => {
+          if (unlinkErr)
+            console.error("Error deleting file on catch error:", unlinkErr);
+        });
+      }
+
       console.error("Error uploading image:", error);
       res.status(500).json({
         success: false,
@@ -2558,6 +2628,99 @@ app.get(
   })
 );
 
+app.get("/settings-visits/:username", async (req, res) => {
+  const { username } = req.params;
+
+  try {
+    // Query to get user details from tbl_emp_profile
+    const userQuery = `
+      SELECT 
+        ep.user_name AS username,
+        ep.full_name AS name,
+        ep.mobile1 AS mobile,
+        ep.entry_id
+      FROM tbl_emp_profile ep
+      WHERE ep.user_name = ?
+    `;
+
+    db.query(userQuery, [username], (userErr, userResults) => {
+      if (userErr) {
+        console.error("Error fetching user details:", userErr);
+        return res.status(500).json({ error: "Database error" });
+      }
+
+      if (userResults.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const user = userResults[0];
+      const entryId = user.entry_id;
+
+      // Query to get total visits count using your provided SQL
+      const visitsQuery = `
+        SELECT COUNT(taa.isVisited) as totalVisits 
+        FROM tbl_assigned_agents taa, tbl_emp_profile tep 
+        WHERE tep.user_name = ? 
+        AND tep.entry_id = taa.assigned_agent_id 
+        AND isVisited = 1
+      `;
+
+      db.query(visitsQuery, [username], (visitsErr, visitsResults) => {
+        if (visitsErr) {
+          console.error("Error fetching visits count:", visitsErr);
+          return res.status(500).json({ error: "Database error" });
+        }
+
+        const responseData = {
+          username: user.username,
+          name: user.name,
+          mobile: user.mobile,
+          totalVisits: visitsResults[0]?.totalVisits || 0,
+        };
+
+        res.json(responseData);
+      });
+    });
+  } catch (error) {
+    console.error("Server error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// API endpoint to get customers by date
+app.get("/customers/date/:date", (req, res) => {
+  const { date } = req.params;
+
+  // Split the date (assuming format: DD-MM-YYYY)
+  const [day, month, year] = date.split("-");
+
+  // Format for MySQL DATE field: YYYY-MM-DD
+  const mysqlDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+
+  const query = `
+    SELECT 
+      taa.pt_no AS PtNo,
+      tc.name AS name,
+      tc.address,
+      tc.mobile_number AS mobile,
+      taa.visited_date AS visitedDate,
+      taa.isVisited
+    FROM tbl_assigned_agents taa
+    LEFT JOIN tbl_customers tc ON taa.pt_no = tc.pt_no
+    WHERE DATE(taa.visited_date) = ?
+    ORDER BY taa.visited_date DESC
+  `;
+
+  db.query(query, [mysqlDate], (err, results) => {
+    if (err) {
+      console.error("Error fetching date customers:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    res.json(results);
+  });
+});
+
 // Add graceful shutdown handlers
 const gracefulShutdown = () => {
   console.log("Shutting down gracefully...");
@@ -2573,14 +2736,15 @@ const gracefulShutdown = () => {
 process.on("SIGTERM", gracefulShutdown);
 process.on("SIGINT", gracefulShutdown);
 
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-}).on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use`);
-    process.exit(1);
-  } else {
-    console.error('Server error:', err);
-  }
-});
+app
+  .listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  })
+  .on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`Port ${PORT} is already in use`);
+      process.exit(1);
+    } else {
+      console.error("Server error:", err);
+    }
+  });

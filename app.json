@@ -34,18 +34,19 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera",
-          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone",
+          "cameraPermission": "Allow $(SVF recovery) to access your camera",
+          "microphonePermission": "Allow $(SVF recovery) to access your microphone",
           "recordAudioAndroid": true
         }
       ],
-      "expo-maps"
+      "expo-maps",
+      "expo-font"
     ],
+    "owner": "vaibhav_372",
     "extra": {
       "eas": {
-        "projectId": "e056f9b5-7df9-4ac1-8be6-1f0aacbe2a0c"
+        "projectId": "963639dd-dc37-4937-ac29-5f14f47153fa"
       }
-    },
-    "owner": "vaibhav_372"
+    }
   }
 }

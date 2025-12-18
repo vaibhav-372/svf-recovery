@@ -1,4 +1,3 @@
-// PromiseRejectionHandler.js
 export const setupPromiseRejectionHandler = () => {
   if (!global.PromiseRejectionHandlerSet) {
     global.PromiseRejectionHandlerSet = true;

@@ -72,30 +72,26 @@ const History = () => {
         // Group by customer_id to show only one card per customer
         const customerMap = new Map();
 
-        result.data.forEach((item) => {
-          if (!customerMap.has(item.customer_id)) {
-            customerMap.set(item.customer_id, {
-              customer_id: item.customer_id,
-              name: item.name || item.customer_name,
-              number: item.number || item.contact_number1,
-              address: item.address,
-              city: item.city,
-              // Store all responses for this customer
+        result?.data?.forEach((item) => {
+          if (!customerMap.has(item?.customer_id)) {
+            customerMap.set(item?.customer_id, {
+              customer_id: item?.customer_id,
+              name: item?.name || item?.customer_name,
+              number: item?.number || item?.contact_number1,
+              address: item?.address,
+              city: item?.city,
               allResponses: [item],
-              // Use the latest visited_time
-              visited_time: item.visited_time,
-              uniqueKey: `customer_${item.customer_id}_${Date.now()}`,
+              visited_time: item?.visited_time,
+              uniqueKey: `customer_${item?.customer_id}_${Date.now()}`,
             });
           } else {
-            // Add this response to existing customer
-            const existingCustomer = customerMap.get(item.customer_id);
-            existingCustomer.allResponses.push(item);
-            // Update to latest visited_time
+            const existingCustomer = customerMap.get(item?.customer_id);
+            existingCustomer?.allResponses?.push(item);
             if (
-              new Date(item.visited_time) >
-              new Date(existingCustomer.visited_time)
+              new Date(item?.visited_time) >
+              new Date(existingCustomer?.visited_time)
             ) {
-              existingCustomer.visited_time = item.visited_time;
+              existingCustomer.visited_time = item?.visited_time;
             }
           }
         });
@@ -152,14 +148,14 @@ const History = () => {
   };
 
   const formatDate = (date) => {
-    return date.toISOString().split("T")[0];
+    return date?.toISOString()?.split("T")[0];
   };
 
   const formatTime = (timeString) => {
     if (!timeString) return "N/A";
     try {
       const date = new Date(timeString);
-      return date.toLocaleTimeString([], {
+      return date?.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -314,7 +310,8 @@ const History = () => {
         ) : (
           filteredData.map((person, index) => {
             const itemKey =
-              person.uniqueKey || `history_item_${person.customer_id}_${index}`;
+              person?.uniqueKey ||
+              `history_item_${person?.customer_id}_${index}`;
 
             return (
               <TouchableOpacity
@@ -334,25 +331,25 @@ const History = () => {
                   {/* Left Section */}
                   <View style={tw`flex-1`}>
                     <Text style={tw`text-lg font-bold`}>
-                      {person.name ||
-                        person.customer_name ||
+                      {person?.name ||
+                        person?.customer_name ||
                         "Unknown Customer"}
                     </Text>
                     <Text style={tw`text-sm text-gray-700 mt-1`}>
-                      {person.number || person.contact_number1 || "No Number"}
+                      {person?.number || person?.contact_number1 || "No Number"}
                     </Text>
                     <Text style={tw`text-xs text-gray-500 mt-1`}>
-                      {person.allResponses?.length || 0} PT number(s)
+                      {person?.allResponses?.length || 0} PT number(s)
                     </Text>
                   </View>
 
                   {/* Right Section */}
                   <View style={tw`flex-1 items-end`}>
                     <Text style={tw`text-sm text-gray-700 text-right`}>
-                      {person.address ? person.address : "Completed"}
+                      {person?.address ? person.address : "Completed"}
                     </Text>
                     <Text style={tw`text-sm text-gray-700 mt-3 font-bold`}>
-                      {formatTime(person.visited_time)}
+                      {formatTime(person?.visited_time)}
                     </Text>
                   </View>
                 </View>

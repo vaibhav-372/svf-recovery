@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,84 +10,232 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import tw from 'tailwind-react-native-classnames';
+import ErrorBoundary from './ErrorBoundary';
 
 const { width, height } = Dimensions.get('window');
 
-const PreviousResponsesList = ({ 
-  visible, 
-  onClose, 
-  customerId, 
-  token, 
+const PreviousResponsesList = ({
+  visible,
+  onClose,
+  customerId,
+  token,
   BASE_URL,
-  customerName 
+  customerName,
 }) => {
+  const [isMounted, setIsMounted] = useState(false);
   const [previousResponses, setPreviousResponses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [imageError, setImageError] = useState(false);
+  const [imageError, setImageError] = useState({});
+  const [hasError, setHasError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  const lastLoadTimeRef = useRef(0);
+  const flatListRef = useRef(null);
+
+  const hasRequiredParams = useMemo(() => {
+    // Strict validation of all required parameters
+    const isValidVisible = typeof visible === 'boolean';
+    const isValidCustomerId = customerId && typeof customerId === 'string' && customerId.trim().length > 0;
+    const isValidToken = token && typeof token === 'string' && token.trim().length > 0;
+    const isValidBaseUrl = BASE_URL && typeof BASE_URL === 'string' && BASE_URL.trim().length > 0;
+    
+    return isValidVisible && visible && isValidCustomerId && isValidToken && isValidBaseUrl;
+  }, [visible, customerId, token, BASE_URL]);
 
   useEffect(() => {
-    if (visible && customerId) {
-      loadPreviousResponses();
-    } else {
-      // Reset states when modal closes
+    setIsMounted(true);
+    
+    return () => {
+      setIsMounted(false);
+      // Clean up all state to prevent memory leaks
       setPreviousResponses([]);
       setSelectedResponse(null);
-      setImageError(false);
+      setImageError({});
+      setHasError(false);
+      setRetryCount(0);
+      setRefreshing(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    
+    if (hasRequiredParams) {
+      // Debounce loading to prevent rapid calls
+      const now = Date.now();
+      if (now - lastLoadTimeRef.current > 1000) {
+        loadPreviousResponses();
+        lastLoadTimeRef.current = now;
+      }
+    } else {
+      // Reset states when modal closes
+      if (isMounted) {
+        setPreviousResponses([]);
+        setSelectedResponse(null);
+        setImageError({});
+        setHasError(false);
+      }
     }
-  }, [visible, customerId]);
+    
+    return () => {
+      if (isMounted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    };
+  }, [hasRequiredParams, isMounted, retryCount]);
 
   const loadPreviousResponses = async () => {
+    if (!isMounted) return;
+    
     try {
-      // Validate inputs
-      if (!customerId || !token || !BASE_URL) {
-        console.error('Missing required parameters:', { customerId, token: !!token, BASE_URL });
-        Alert.alert('Error', 'Missing required information');
+      // Validate all parameters before making request
+      if (!hasRequiredParams) {
+        console.error("Missing required parameters for previous responses:", {
+          customerId,
+          tokenLength: token ? token.length : 0,
+          BASE_URL,
+          visible,
+        });
+        
+        if (isMounted) {
+          setHasError(true);
+        }
         return;
       }
 
-      setLoading(true);
-      const response = await fetch(
-        `${BASE_URL}/api/get-all-previous-responses/${customerId}`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      if (isMounted) {
+        setLoading(true);
+        setHasError(false);
+      }
+
+      // Construct URL with proper encoding
+      const apiUrl = `${BASE_URL}/api/get-all-previous-responses/${encodeURIComponent(customerId)}`;
+      
+      if (!apiUrl || !apiUrl.startsWith('http')) {
+        throw new Error('Invalid API URL constructed');
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`HTTP error ${response.status}:`, errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
       
-      // Safely handle API response
-      if (result && result.success) {
-        setPreviousResponses(Array.isArray(result.previousResponses) ? result.previousResponses : []);
+      if (!isMounted) return;
+
+      // Safely handle API response with comprehensive validation
+      if (result && typeof result === 'object' && result.success) {
+        const responses = result.previousResponses;
+        
+        if (Array.isArray(responses)) {
+          // Filter out invalid items and ensure each is an object with required properties
+          const validResponses = responses.filter(item => 
+            item && 
+            typeof item === 'object' && 
+            item.entry_id // At least have an ID
+          );
+          
+          setPreviousResponses(validResponses);
+        } else {
+          setPreviousResponses([]);
+          console.log("API response.previousResponses is not an array:", responses);
+        }
       } else {
         setPreviousResponses([]);
+        console.log("API returned unsuccessful:", result);
       }
     } catch (error) {
       console.error('Error loading previous responses:', error);
-      Alert.alert('Error', 'Failed to load previous visits');
-      setPreviousResponses([]);
+      
+      if (isMounted) {
+        setHasError(true);
+        setPreviousResponses([]);
+        
+        // Only show alert for non-abort errors
+        if (error.name !== 'AbortError') {
+          if (retryCount < 2) {
+            Alert.alert(
+              'Connection Issue', 
+              'Having trouble loading responses. Would you like to try again?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Retry', 
+                  onPress: () => {
+                    if (isMounted) {
+                      setRetryCount(prev => prev + 1);
+                    }
+                  }
+                }
+              ]
+            );
+          } else {
+            Alert.alert(
+              'Error', 
+              'Failed to load previous visits. Please check your connection and try again.'
+            );
+          }
+        }
+      }
     } finally {
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
+  };
+
+  const handleRefresh = () => {
+    if (!isMounted || refreshing) return;
+    
+    setRefreshing(true);
+    setRetryCount(0);
+    loadPreviousResponses();
   };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown date';
+    
     try {
-      const date = new Date(dateString);
-      return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleDateString('en-US', {
+      const safeString = typeof dateString === 'string' ? dateString : String(dateString);
+      
+      // Handle various date formats
+      let date = new Date(safeString);
+      
+      if (isNaN(date.getTime())) {
+        // Try parsing as ISO string
+        const isoDate = new Date(safeString.replace(' ', 'T'));
+        if (isNaN(isoDate.getTime())) {
+          return 'Invalid date';
+        }
+        date = isoDate;
+      }
+      
+      return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -95,29 +243,39 @@ const PreviousResponsesList = ({
         minute: '2-digit'
       });
     } catch (error) {
+      console.error('Date formatting error:', error);
       return 'Invalid date';
     }
   };
 
   const handleResponsePress = (response) => {
-    if (!response) return;
+    if (!isMounted) return;
     
+    if (!response || typeof response !== 'object') {
+      console.warn('Attempted to press invalid response:', response);
+      return;
+    }
+
     setSelectedResponse(response);
     setDetailModalVisible(true);
-    setImageError(false);
   };
 
   const getSafeImageUrl = (imageUrl) => {
-    if (!imageUrl) return null;
-    
+    if (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim().length === 0) {
+      return null;
+    }
+
     try {
+      // Clean up the URL
+      const cleanUrl = imageUrl.trim();
+      
       // Handle both absolute and relative URLs
-      if (imageUrl.startsWith('http')) {
-        return imageUrl;
-      } else if (imageUrl.startsWith('/')) {
-        return `${BASE_URL}${imageUrl}`;
+      if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+        return cleanUrl;
+      } else if (cleanUrl.startsWith('/')) {
+        return `${BASE_URL}${cleanUrl}`;
       } else {
-        return `${BASE_URL}/${imageUrl}`;
+        return `${BASE_URL}/${cleanUrl}`;
       }
     } catch (error) {
       console.error('Error constructing image URL:', error);
@@ -125,14 +283,18 @@ const PreviousResponsesList = ({
     }
   };
 
-  const handleImageError = () => {
-    console.log('Image failed to load');
-    setImageError(true);
+  const handleImageError = (responseId) => {
+    if (!isMounted) return;
+    
+    setImageError(prev => ({
+      ...prev,
+      [responseId]: true
+    }));
   };
 
   const renderResponseItem = ({ item, index }) => {
     // Safety check for null item
-    if (!item) {
+    if (!item || typeof item !== 'object') {
       return (
         <View style={tw`p-4 border-b border-gray-200 bg-red-50`}>
           <Text style={tw`text-red-500 text-sm`}>Invalid response data</Text>
@@ -140,242 +302,354 @@ const PreviousResponsesList = ({
       );
     }
 
-    const safeItem = item || {};
-    
-    return (
-      <TouchableOpacity
-        style={[
-          tw`p-4 border-b border-gray-200`,
-          safeItem.is_current_agent && tw`bg-blue-50`
-        ]}
-        onPress={() => handleResponsePress(safeItem)}
-      >
-        <View style={tw`flex-row justify-between items-start mb-2`}>
-          <View style={tw`flex-1`}>
-            <Text style={tw`font-bold text-gray-800`}>
-              {safeItem.agent_name || safeItem.agent_full_name || 'Unknown Agent'}
-              {safeItem.is_current_agent && (
-                <Text style={tw`text-blue-600 text-xs`}> (You)</Text>
-              )}
-            </Text>
-            <Text style={tw`text-sm text-gray-600 mt-1`}>
-              PT: {safeItem.pt_no || 'N/A'}
-            </Text>
-            <Text style={[
-              tw`text-sm font-medium mt-1`,
-              safeItem.response_text === 'Others' ? tw`text-purple-600` : tw`text-green-600`
-            ]}>
-              {safeItem.response_text === 'Others' 
-                ? (safeItem.response_description || 'Other') 
-                : (safeItem.response_text || 'No response')}
-            </Text>
-          </View>
-          <View style={tw`items-end`}>
-            <Text style={tw`text-xs text-gray-500`}>
-              {formatDate(safeItem.response_timestamp)}
-            </Text>
-            {safeItem.image_url && (
-              <Ionicons name="camera" size={16} color="#6b7280" style={tw`mt-1`} />
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+    const safeItem = item;
+    const responseId = safeItem.entry_id || `index-${index}`;
 
-  const renderDetailModal = () => (
-    <Modal
-      visible={detailModalVisible}
-      animationType="slide"
-      onRequestClose={() => setDetailModalVisible(false)}
-    >
-      <View style={tw`flex-1 bg-white`}>
-        {/* Header */}
-        <View style={tw`px-4 py-3 border-b border-gray-200 flex-row justify-between items-center`}>
-          <Text style={tw`text-lg font-bold text-gray-800`}>Response Details</Text>
-          <TouchableOpacity
-            onPress={() => setDetailModalVisible(false)}
-            style={tw`p-2`}
-          >
-            <Ionicons name="close" size={24} color="#4b5563" />
-          </TouchableOpacity>
-        </View>
+    try {
+      const isCurrentAgent = safeItem.is_current_agent === true;
+      const isOthersResponse = safeItem.response_text === 'Others';
+      const responseText = isOthersResponse 
+        ? (safeItem.response_description || 'Other') 
+        : (safeItem.response_text || 'No response');
+      
+      // Truncate long descriptions for Others response
+      const displayText = isOthersResponse && responseText.length > 30
+        ? responseText.substring(0, 30) + '...'
+        : responseText;
 
-        {selectedResponse ? (
-          <ScrollView style={tw`flex-1 p-4`}>
-            {/* Agent Info */}
-            <View style={tw`bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4`}>
-              <Text style={tw`font-bold text-blue-800 text-lg`}>
-                {selectedResponse.agent_name || selectedResponse.agent_full_name || 'Unknown Agent'}
-                {selectedResponse.is_current_agent && (
-                  <Text style={tw`text-blue-600`}> (You)</Text>
+      return (
+        <TouchableOpacity
+          style={[
+            tw`p-4 border-b border-gray-200`,
+            isCurrentAgent && tw`bg-blue-50`
+          ]}
+          onPress={() => handleResponsePress(safeItem)}
+          activeOpacity={0.7}
+        >
+          <View style={tw`flex-row justify-between items-start mb-2`}>
+            <View style={tw`flex-1`}>
+              <Text style={tw`font-bold text-gray-800`}>
+                {safeItem.agent_name || safeItem.agent_full_name || 'Unknown Agent'}
+                {isCurrentAgent && (
+                  <Text style={tw`text-blue-600 text-xs`}> (You)</Text>
                 )}
               </Text>
-              <Text style={tw`text-blue-700 text-sm mt-1`}>
-                PT: {selectedResponse.pt_no || 'N/A'}
+              <Text style={tw`text-sm text-gray-600 mt-1`}>
+                PT: {safeItem.pt_no || 'N/A'}
+              </Text>
+              <Text style={[
+                tw`text-sm font-medium mt-1`,
+                isOthersResponse ? tw`text-purple-600` : tw`text-green-600`
+              ]}
+              numberOfLines={1}
+              >
+                {displayText}
               </Text>
             </View>
-
-            {/* Visit Date */}
-            <View style={tw`mb-4`}>
-              <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Visit Date & Time:</Text>
-              <Text style={tw`text-gray-600`}>
-                {formatDate(selectedResponse.response_timestamp)}
+            <View style={tw`items-end`}>
+              <Text style={tw`text-xs text-gray-500`}>
+                {formatDate(safeItem.response_timestamp)}
               </Text>
+              {safeItem.image_url && (
+                <Ionicons 
+                  name="camera" 
+                  size={16} 
+                  color="#6b7280" 
+                  style={tw`mt-1`} 
+                />
+              )}
             </View>
+          </View>
+        </TouchableOpacity>
+      );
+    } catch (renderError) {
+      console.error('Error rendering response item:', renderError);
+      return (
+        <View style={tw`p-4 border-b border-gray-200 bg-yellow-50`}>
+          <Text style={tw`text-yellow-700 text-sm`}>
+            Error displaying response
+          </Text>
+        </View>
+      );
+    }
+  };
 
-            {/* Response */}
-            <View style={tw`mb-4`}>
-              <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Response:</Text>
-              <View style={tw`bg-gray-50 border border-gray-200 rounded-lg p-3`}>
-                <Text style={tw`text-gray-800 font-medium`}>
-                  {selectedResponse.response_text || 'No response recorded'}
+  const renderDetailModal = () => {
+    if (!selectedResponse || typeof selectedResponse !== 'object') {
+      return null;
+    }
+
+    const safeResponse = selectedResponse;
+    const responseId = safeResponse.entry_id || 'detail';
+    const imageUrl = getSafeImageUrl(safeResponse.image_url);
+    const hasImage = imageUrl && !imageError[responseId];
+
+    return (
+      <Modal
+        visible={detailModalVisible}
+        animationType="slide"
+        onRequestClose={() => {
+          if (isMounted) {
+            setDetailModalVisible(false);
+          }
+        }}
+      >
+        <View style={tw`flex-1 bg-white`}>
+          {/* Header */}
+          <View style={tw`px-4 py-3 border-b border-gray-200 flex-row justify-between items-center`}>
+            <Text style={tw`text-lg font-bold text-gray-800`}>Response Details</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (isMounted) {
+                  setDetailModalVisible(false);
+                }
+              }}
+              style={tw`p-2`}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={24} color="#4b5563" />
+            </TouchableOpacity>
+          </View>
+
+          {safeResponse ? (
+            <ScrollView 
+              style={tw`flex-1 p-4`}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Agent Info */}
+              <View style={tw`bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4`}>
+                <Text style={tw`font-bold text-blue-800 text-lg`}>
+                  {safeResponse.agent_name || safeResponse.agent_full_name || 'Unknown Agent'}
+                  {safeResponse.is_current_agent && (
+                    <Text style={tw`text-blue-600`}> (You)</Text>
+                  )}
+                </Text>
+                <Text style={tw`text-blue-700 text-sm mt-1`}>
+                  PT: {safeResponse.pt_no || 'N/A'}
                 </Text>
               </View>
-            </View>
 
-            {/* Description */}
-            {selectedResponse.response_description && (
+              {/* Visit Date */}
               <View style={tw`mb-4`}>
-                <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Description:</Text>
+                <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Visit Date & Time:</Text>
+                <Text style={tw`text-gray-600`}>
+                  {formatDate(safeResponse.response_timestamp)}
+                </Text>
+              </View>
+
+              {/* Response */}
+              <View style={tw`mb-4`}>
+                <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Response:</Text>
                 <View style={tw`bg-gray-50 border border-gray-200 rounded-lg p-3`}>
-                  <Text style={tw`text-gray-800`}>
-                    {selectedResponse.response_description}
+                  <Text style={tw`text-gray-800 font-medium`}>
+                    {safeResponse.response_text || 'No response recorded'}
                   </Text>
                 </View>
               </View>
-            )}
 
-            {/* Image */}
-            {selectedResponse.image_url && (
-              <View style={tw`mb-4`}>
-                <Text style={tw`text-sm font-semibold text-gray-700 mb-2`}>Visit Image:</Text>
-                <View style={tw`border border-gray-200 rounded-lg overflow-hidden`}>
-                  {!imageError ? (
+              {/* Description */}
+              {safeResponse.response_description && (
+                <View style={tw`mb-4`}>
+                  <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Description:</Text>
+                  <View style={tw`bg-gray-50 border border-gray-200 rounded-lg p-3`}>
+                    <Text style={tw`text-gray-800`}>
+                      {safeResponse.response_description}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Image */}
+              {hasImage && (
+                <View style={tw`mb-4`}>
+                  <Text style={tw`text-sm font-semibold text-gray-700 mb-2`}>Visit Image:</Text>
+                  <View style={tw`border border-gray-200 rounded-lg overflow-hidden bg-gray-100`}>
                     <Image
-                      source={{ uri: getSafeImageUrl(selectedResponse.image_url) }}
+                      source={{ uri: imageUrl }}
                       style={{
                         width: width - 32,
                         height: 300,
-                        resizeMode: 'cover'
+                        resizeMode: 'contain'
                       }}
-                      onError={handleImageError}
+                      onError={() => handleImageError(responseId)}
                     />
-                  ) : (
-                    <View style={[tw`justify-center items-center bg-gray-100`, { width: width - 32, height: 300 }]}>
-                      <Ionicons name="image-outline" size={50} color="#9ca3af" />
-                      <Text style={tw`text-gray-500 mt-2`}>Image not available</Text>
-                    </View>
-                  )}
+                  </View>
                 </View>
-              </View>
-            )}
+              )}
 
-            {/* Location */}
-            {(selectedResponse.latitude && selectedResponse.longitude) && (
-              <View style={tw`mb-4`}>
-                <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Location:</Text>
-                <Text style={tw`text-gray-600 text-sm`}>
-                  Latitude: {selectedResponse.latitude}, Longitude: {selectedResponse.longitude}
+              {/* Show image error state */}
+              {safeResponse.image_url && !hasImage && (
+                <View style={tw`mb-4`}>
+                  <Text style={tw`text-sm font-semibold text-gray-700 mb-2`}>Visit Image:</Text>
+                  <View style={[
+                    tw`justify-center items-center border border-gray-200 rounded-lg`,
+                    { width: width - 32, height: 300 }
+                  ]}>
+                    <Ionicons name="image-outline" size={50} color="#9ca3af" />
+                    <Text style={tw`text-gray-500 mt-2`}>Image not available</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Location */}
+              {(safeResponse.latitude && safeResponse.longitude) && (
+                <View style={tw`mb-4`}>
+                  <Text style={tw`text-sm font-semibold text-gray-700 mb-1`}>Location:</Text>
+                  <Text style={tw`text-gray-600 text-sm`}>
+                    Latitude: {safeResponse.latitude}, Longitude: {safeResponse.longitude}
+                  </Text>
+                </View>
+              )}
+
+              {/* Additional Info */}
+              <View style={tw`bg-gray-50 border border-gray-200 rounded-lg p-3`}>
+                <Text style={tw`text-xs text-gray-600 text-center`}>
+                  Recorded via {safeResponse.device_id || 'Mobile App'}
                 </Text>
               </View>
-            )}
-
-            {/* Additional Info */}
-            <View style={tw`bg-gray-50 border border-gray-200 rounded-lg p-3`}>
-              <Text style={tw`text-xs text-gray-600 text-center`}>
-                Recorded via {selectedResponse.device_id || 'Mobile App'}
-              </Text>
+            </ScrollView>
+          ) : (
+            <View style={tw`flex-1 justify-center items-center`}>
+              <Text style={tw`text-gray-500`}>No response data available</Text>
             </View>
-          </ScrollView>
-        ) : (
-          <View style={tw`flex-1 justify-center items-center`}>
-            <Text style={tw`text-gray-500`}>No response data available</Text>
-          </View>
-        )}
+          )}
 
-        {/* Close Button */}
-        <View style={tw`p-4 border-t border-gray-200`}>
-          <TouchableOpacity
-            onPress={() => setDetailModalVisible(false)}
-            style={[tw`rounded-full px-6 py-3`, { backgroundColor: '#7cc0d8' }]}
-          >
-            <Text style={tw`text-white text-lg font-bold text-center`}>Close</Text>
-          </TouchableOpacity>
+          {/* Close Button */}
+          <View style={tw`p-4 border-t border-gray-200`}>
+            <Pressable
+              onPress={() => {
+                if (isMounted) {
+                  setDetailModalVisible(false);
+                }
+              }}
+              style={[tw`rounded-full px-6 py-3`, { backgroundColor: '#7cc0d8' }]}
+            >
+              <Text style={tw`text-white text-lg font-bold text-center`}>Close</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
-    </Modal>
-  );
+      </Modal>
+    );
+  };
 
   // Safety check for main modal
-  if (!visible) return null;
+  if (!visible || !isMounted) return null;
+
+  const safeCustomerName = customerName || 'Customer';
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}
+    <ErrorBoundary
+      fallbackMessage="Unable to load previous responses"
+      showRetry
     >
-      <View style={tw`flex-1 bg-white`}>
-        {/* Header */}
-        <View style={tw`px-4 py-3 border-b border-gray-200 flex-row justify-between items-center`}>
-          <View style={tw`flex-1`}>
-            <Text style={tw`text-lg font-bold text-gray-800`}>Previous Visits</Text>
-            <Text style={tw`text-sm text-gray-600`} numberOfLines={1}>
-              {customerName || 'Customer'}
+      <Modal
+        visible={visible}
+        animationType="slide"
+        onRequestClose={onClose}
+      >
+        <View style={tw`flex-1 bg-white`}>
+          {/* Header */}
+          <View style={tw`px-4 py-3 border-b border-gray-200 flex-row justify-between items-center`}>
+            <View style={tw`flex-1`}>
+              <Text style={tw`text-lg font-bold text-gray-800`}>Previous Visits</Text>
+              <Text style={tw`text-sm text-gray-600`} numberOfLines={1}>
+                {safeCustomerName}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={tw`p-2`}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={24} color="#4b5563" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Stats */}
+          <View style={tw`px-4 py-3 bg-gray-50 border-b border-gray-200`}>
+            <Text style={tw`text-sm text-gray-700`}>
+              {hasError 
+                ? 'Error loading visits' 
+                : `Total ${previousResponses.length} visit${previousResponses.length !== 1 ? 's' : ''} recorded`
+              }
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={onClose}
-            style={tw`p-2`}
-          >
-            <Ionicons name="close" size={24} color="#4b5563" />
-          </TouchableOpacity>
+
+          {/* Loading State */}
+          {loading ? (
+            <View style={tw`flex-1 justify-center items-center`}>
+              <ActivityIndicator size="large" color="#7cc0d8" />
+              <Text style={tw`text-gray-600 mt-2`}>Loading previous visits...</Text>
+            </View>
+          ) : hasError ? (
+            <View style={tw`flex-1 justify-center items-center p-4`}>
+              <Ionicons name="alert-circle-outline" size={50} color="#ef4444" />
+              <Text style={tw`text-lg text-red-500 text-center mt-2`}>
+                Failed to load visits
+              </Text>
+              <Text style={tw`text-sm text-gray-400 text-center mt-1 mb-4`}>
+                Please check your connection and try again
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (isMounted) {
+                    setRetryCount(prev => prev + 1);
+                    setHasError(false);
+                  }
+                }}
+                style={tw`bg-blue-500 px-6 py-3 rounded-full`}
+              >
+                <Text style={tw`text-white font-bold`}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : previousResponses.length > 0 ? (
+            <FlatList
+              ref={flatListRef}
+              data={previousResponses}
+              renderItem={renderResponseItem}
+              keyExtractor={(item, index) => {
+                // Safe key extraction with validation
+                if (!item || typeof item !== 'object') {
+                  return `null-item-${index}-${Date.now()}`;
+                }
+                
+                const entryId = item.entry_id;
+                const responseId = item.response_id;
+                
+                if (entryId) {
+                  return `response-${entryId}-${index}`;
+                } else if (responseId) {
+                  return `response-${responseId}-${index}`;
+                } else {
+                  return `response-${index}-${Date.now()}`;
+                }
+              }}
+              showsVerticalScrollIndicator={false}
+              initialNumToRender={5}
+              maxToRenderPerBatch={5}
+              windowSize={3}
+              removeClippedSubviews={false}
+              updateCellsBatchingPeriod={50}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+            />
+          ) : (
+            <View style={tw`flex-1 justify-center items-center p-4`}>
+              <Ionicons name="time-outline" size={50} color="#9ca3af" />
+              <Text style={tw`text-lg text-gray-500 text-center mt-2`}>
+                No previous visits found
+              </Text>
+              <Text style={tw`text-sm text-gray-400 text-center mt-1`}>
+                Visit responses will appear here after they are saved
+              </Text>
+            </View>
+          )}
+
+          {/* Detail Modal */}
+          {renderDetailModal()}
         </View>
-
-        {/* Stats */}
-        <View style={tw`px-4 py-3 bg-gray-50 border-b border-gray-200`}>
-          <Text style={tw`text-sm text-gray-700`}>
-            Total {previousResponses.length} visit{previousResponses.length !== 1 ? 's' : ''} recorded
-          </Text>
-        </View>
-
-        {/* List */}
-        {loading ? (
-          <View style={tw`flex-1 justify-center items-center`}>
-            <ActivityIndicator size="large" color="#7cc0d8" />
-            <Text style={tw`text-gray-600 mt-2`}>Loading previous visits...</Text>
-          </View>
-        ) : previousResponses.length > 0 ? (
-          <FlatList
-            data={previousResponses}
-            renderItem={renderResponseItem}
-            keyExtractor={(item, index) => {
-              // Safe key extraction
-              if (!item) return `null-item-${index}`;
-              return `response-${item.entry_id || item.response_id || index}-${index}`;
-            }}
-            showsVerticalScrollIndicator={false}
-            initialNumToRender={10}
-            maxToRenderPerBatch={10}
-            windowSize={5}
-          />
-        ) : (
-          <View style={tw`flex-1 justify-center items-center p-4`}>
-            <Ionicons name="time-outline" size={50} color="#9ca3af" />
-            <Text style={tw`text-lg text-gray-500 text-center mt-2`}>
-              No previous visits found
-            </Text>
-            <Text style={tw`text-sm text-gray-400 text-center mt-1`}>
-              Visit responses will appear here after they are saved
-            </Text>
-          </View>
-        )}
-
-        {/* Detail Modal */}
-        {renderDetailModal()}
-      </View>
-    </Modal>
+      </Modal>
+    </ErrorBoundary>
   );
 };
 
