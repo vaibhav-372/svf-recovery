@@ -188,7 +188,6 @@ const Customers = () => {
             city: customer.address || "N/A",
             isVisited: customer.isVisited || 0,
             visited: customer.visited || 0,
-            // Include all original data for detailed view
             ...customer,
           }));
 

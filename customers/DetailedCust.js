@@ -21,6 +21,7 @@ import MapWebView from "./MapWebView";
 import ImageViewing from "react-native-image-viewing";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 const { height } = Dimensions.get("window");
 
@@ -570,14 +571,20 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
       >
         {/* Header with Icons */}
         <View style={tw`flex flex-row justify-end mb-4`}>
-
           {/* Close Button (X) in top right */}
           <TouchableOpacity onPress={onClose}>
             <Ionicons name="close" size={28} color="#ef4444" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={tw`px-2`} showsVerticalScrollIndicator={false}>
+        <KeyboardAwareScrollView
+          style={tw`px-2`}
+          showsVerticalScrollIndicator={false}
+          enableOnAndroid={true}
+          extraScrollHeight={100}
+          keyboardShouldPersistTaps="handled"
+          enableResetScrollToCoords={false}
+        >
           <Text
             style={[
               tw`text-2xl font-extrabold mb-3 text-center`,
@@ -797,7 +804,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           )}
 
           <View style={tw`mb-32`} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View
           style={tw`absolute bottom-5 left-4 right-4 flex-row justify-between`}

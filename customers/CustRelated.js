@@ -1,7 +1,6 @@
 import {
   View,
   Text,
-  FlatList,
   Dimensions,
   Pressable,
   ScrollView,
@@ -11,7 +10,7 @@ import {
   Alert,
   TextInput,
 } from "react-native";
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import tw from "tailwind-react-native-classnames";
 import ImageViewing from "react-native-image-viewing";
 import jewel from "../assets/jewel.webp";
@@ -20,6 +19,7 @@ import RNPickerSelect from "react-native-picker-select";
 import { useAuth } from "../context/AuthContext";
 import PreviousResponsesList from "./PreviousResponsesList";
 import PTPreviousResponses from "./PTPreviousResponses";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 const { width, height } = Dimensions.get("window");
 
@@ -125,7 +125,6 @@ const CustRelated = ({ person, onClose }) => {
   const [selectedPT, setSelectedPT] = useState(null);
   const [loadingResponses, setLoadingResponses] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const flatListRef = useRef(null);
 
   const { token } = useAuth();
   const SERVER_IP = "192.168.65.11";
@@ -340,23 +339,6 @@ const CustRelated = ({ person, onClose }) => {
     }
   };
 
-  const onViewRef = useRef(({ viewableItems }) => {
-    if (viewableItems && viewableItems.length > 0) {
-      setCurrentIndex(viewableItems[0].index);
-    }
-  });
-
-  const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
-
-  const openPreviousResponses = (ptNo) => {
-    if (!ptNo) {
-      console.log("No PT number provided for previous responses");
-      return;
-    }
-    setSelectedPT(ptNo);
-    setShowPTPreviousResponses(true);
-  };
-
   // Helper function to get display value
   const getDisplayValue = (item, key) => {
     if (!item || !key) return "0";
@@ -498,6 +480,15 @@ const CustRelated = ({ person, onClose }) => {
     );
   };
 
+  const openPreviousResponses = (ptNo) => {
+    if (!ptNo) {
+      console.log("No PT number provided for previous responses");
+      return;
+    }
+    setSelectedPT(ptNo);
+    setShowPTPreviousResponses(true);
+  };
+
   const saveIndividualResponse = async (ptNo) => {
     if (!ptNo) {
       Alert.alert("Error", "No PT number provided");
@@ -631,17 +622,35 @@ const CustRelated = ({ person, onClose }) => {
     setImageError(true);
   };
 
-  const renderItem = ({ item, index }) => {
-    // Safety check
-    if (!item) {
+  // Navigation functions
+  const goToPrevious = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+    }
+  };
+
+  const goToNext = () => {
+    if (currentIndex < customerRecords.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
+  };
+
+  // Render current card
+  // Render current card
+  const renderCard = () => {
+    if (customerRecords.length === 0 || !customerRecords[currentIndex]) {
       return (
-        <View style={[tw`p-4`, { width: width - 32 }]}>
-          <Text style={tw`text-red-500`}>Invalid record data</Text>
+        <View style={tw`flex-1 justify-center items-center p-4`}>
+          <Ionicons name="alert-circle-outline" size={50} color="#ef4444" />
+          <Text style={tw`text-lg text-red-500 text-center mt-2`}>
+            No loan records found
+          </Text>
         </View>
       );
     }
 
-    const ptNo = getDisplayValue(item, "pt_no") || `Record ${index + 1}`;
+    const item = customerRecords[currentIndex];
+    const ptNo = getDisplayValue(item, "pt_no") || `Record ${currentIndex + 1}`;
     const currentResponse = individualResponses[ptNo] || {
       response: "",
       description: "",
@@ -652,10 +661,13 @@ const CustRelated = ({ person, onClose }) => {
     const hasPreviousResponses = ptResponses.length > 0;
 
     return (
-      <ScrollView
-        style={[tw`p-4`, { width: width - 32 }]}
-        contentContainerStyle={{ minHeight: height - 200 }}
+      <KeyboardAwareScrollView
+        contentContainerStyle={tw`p-4`}
         showsVerticalScrollIndicator={false}
+        enableOnAndroid={true}
+        extraScrollHeight={100}
+        keyboardShouldPersistTaps="handled"
+        enableResetScrollToCoords={false}
       >
         {/* PT Number Header */}
         <View style={[tw`mb-4 p-4 rounded-lg`, { backgroundColor: "#7cc0d8" }]}>
@@ -665,7 +677,7 @@ const CustRelated = ({ person, onClose }) => {
                 PT Number: {ptNo}
               </Text>
               <Text style={tw`text-center text-sm text-white opacity-90 mt-1`}>
-                Record {index + 1} of {customerRecords.length}
+                Card {currentIndex + 1} of {customerRecords.length}
               </Text>
               {hasPreviousResponses && (
                 <Text
@@ -937,7 +949,7 @@ const CustRelated = ({ person, onClose }) => {
             <Text style={tw`text-blue-500 text-sm mt-2`}>Ornament Image</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   };
 
@@ -948,43 +960,31 @@ const CustRelated = ({ person, onClose }) => {
     <View style={tw`flex-1 bg-white`}>
       {/* Header */}
       <View style={tw`px-4 py-3 border-b border-gray-200`}>
-        {/* Header */}
-        <View style={tw`px-4 py-3 border-b border-gray-200`}>
-          <View style={tw`flex-row justify-between items-center`}>
-            <View style={tw`flex-1`}>
-              <Text style={tw`text-center text-xl font-bold text-gray-800`}>
-                {safeCustomerName}
-              </Text>
-              <Text style={tw`text-center text-sm text-gray-600 mt-1`}>
-                {customerRecords.length} Loan Account(s)
-              </Text>
-            </View>
-
-            {/* Close Button (X) in top right */}
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={28} color="#ef4444" />
-            </TouchableOpacity>
+        <View style={tw`flex-row justify-between items-center`}>
+          <View style={tw`flex-1`}>
+            <Text style={tw`text-center text-xl font-bold text-gray-800`}>
+              {safeCustomerName}
+            </Text>
+            <Text style={tw`text-center text-sm text-gray-600 mt-1`}>
+              {customerRecords.length} Loan Account(s)
+            </Text>
           </View>
 
-          {/* Updated summary text */}
-          <Text style={tw`text-center text-xs text-blue-600 mt-1`}>
-            {Object.values(allPreviousResponses).reduce(
-              (total, responses) => total + (responses ? responses.length : 0),
-              0
-            ) > 0
-              ? `${Object.values(allPreviousResponses).reduce((total, responses) => total + (responses ? responses.length : 0), 0)} total responses across all PTs`
-              : "No previous visit responses"}
-          </Text>
-
-          {loadingResponses && (
-            <View style={tw`flex-row justify-center items-center mt-1`}>
-              <ActivityIndicator size="small" color="#3b82f6" />
-              <Text style={tw`text-xs text-blue-600 ml-2`}>
-                Loading responses...
-              </Text>
-            </View>
-          )}
+          {/* Close Button (X) in top right */}
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={28} color="#ef4444" />
+          </TouchableOpacity>
         </View>
+
+        {/* Updated summary text */}
+        <Text style={tw`text-center text-xs text-blue-600 mt-1`}>
+          {Object.values(allPreviousResponses).reduce(
+            (total, responses) => total + (responses ? responses.length : 0),
+            0
+          ) > 0
+            ? `${Object.values(allPreviousResponses).reduce((total, responses) => total + (responses ? responses.length : 0), 0)} total responses across all PTs`
+            : "No previous visit responses"}
+        </Text>
 
         {loadingResponses && (
           <View style={tw`flex-row justify-center items-center mt-1`}>
@@ -996,53 +996,105 @@ const CustRelated = ({ person, onClose }) => {
         )}
       </View>
 
-      {customerRecords.length > 0 ? (
-        <>
-          {/* Horizontal PT Records */}
-          <FlatList
-            ref={flatListRef}
-            data={customerRecords}
-            renderItem={renderItem}
-            keyExtractor={(item, index) => {
-              if (!item) {
-                return `empty-${index}`;
-              }
+      {/* Main Content with Navigation */}
+      <View style={tw`flex-1`}>
+        {customerRecords.length > 0 ? (
+          <>
+            {/* Navigation Buttons and Card */}
+            <View style={tw`flex-1`}>
+              {/* Navigation Buttons Row */}
+              <View style={tw`flex-row justify-between items-center px-4 py-2`}>
+                <TouchableOpacity
+                  onPress={goToPrevious}
+                  disabled={currentIndex === 0}
+                  style={[
+                    tw`px-4 py-3 rounded-full flex-row items-center`,
+                    {
+                      backgroundColor:
+                        currentIndex === 0 ? "#e5e7eb" : "#3b82f6",
+                      opacity: currentIndex === 0 ? 0.5 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={20}
+                    color={currentIndex === 0 ? "#9ca3af" : "white"}
+                  />
+                  <Text
+                    style={[
+                      tw`ml-2 font-bold`,
+                      { color: currentIndex === 0 ? "#9ca3af" : "white" },
+                    ]}
+                  >
+                    Previous
+                  </Text>
+                </TouchableOpacity>
 
-              const ptNo = getDisplayValue(item, "pt_no");
-              if (!ptNo || ptNo === "N/A") {
-                return `no-pt-${index}`;
-              }
+                <Text style={tw`text-gray-600 font-medium`}>
+                  {currentIndex + 1} / {customerRecords.length}
+                </Text>
 
-              return `pt-${ptNo}-${index}`;
-            }}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onViewableItemsChanged={onViewRef.current}
-            viewabilityConfig={viewConfigRef.current}
-            snapToInterval={width}
-            decelerationRate="fast"
-            style={tw`flex-1`}
-            initialNumToRender={3}
-            maxToRenderPerBatch={3}
-            windowSize={5}
-          />
-        </>
-      ) : (
-        <View style={tw`flex-1 justify-center items-center p-4`}>
-          <Ionicons name="alert-circle-outline" size={50} color="#ef4444" />
-          <Text style={tw`text-lg text-red-500 text-center mt-2`}>
-            No loan records found
-          </Text>
-        </View>
-      )}
+                <TouchableOpacity
+                  onPress={goToNext}
+                  disabled={currentIndex === customerRecords.length - 1}
+                  style={[
+                    tw`px-4 py-3 rounded-full flex-row items-center`,
+                    {
+                      backgroundColor:
+                        currentIndex === customerRecords.length - 1
+                          ? "#e5e7eb"
+                          : "#3b82f6",
+                      opacity:
+                        currentIndex === customerRecords.length - 1 ? 0.5 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      tw`mr-2 font-bold`,
+                      {
+                        color:
+                          currentIndex === customerRecords.length - 1
+                            ? "#9ca3af"
+                            : "white",
+                      },
+                    ]}
+                  >
+                    Next
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={
+                      currentIndex === customerRecords.length - 1
+                        ? "#9ca3af"
+                        : "white"
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
 
-      {/* Close Button */}
+              {/* Card Content */}
+              {renderCard()}
+            </View>
+          </>
+        ) : (
+          <View style={tw`flex-1 justify-center items-center p-4`}>
+            <Ionicons name="alert-circle-outline" size={50} color="#ef4444" />
+            <Text style={tw`text-lg text-red-500 text-center mt-2`}>
+              No loan records found
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* View All Responses Button - Fixed at bottom */}
       <Pressable
         onPress={() => setShowPreviousResponses(true)}
         style={[
-          tw`absolute bottom-3 self-center px-6 py-3 rounded-full`,
-          { backgroundColor: "#3b82f6" },
+          tw`absolute bottom-4 self-center px-6 py-3 rounded-full shadow-lg`,
+          { backgroundColor: "#3b82f6", elevation: 5 },
         ]}
       >
         <Text style={tw`text-white text-lg font-bold`}>View All Responses</Text>
