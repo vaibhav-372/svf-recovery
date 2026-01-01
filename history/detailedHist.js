@@ -112,8 +112,8 @@ const DetailedHist = ({ person, onClose }) => {
       // If imageUrl doesn't start with http, prepend the server URL
       if (!imageUrl.startsWith("http")) {
         // Remove leading slash if present
-        const cleanImageUrl = imageUrl.startsWith("/") ? imageUrl.substring(1) : imageUrl;
-        // Use the correct server IP from your DetailedCust.js
+        const cleanImageUrl = imageUrl.startsWith("/") ? imageUrl.substring(1) : imageUrl;        
+        
         const SERVER_IP = "192.168.65.11";
         fullImageUrl = `http://${SERVER_IP}:3000/${cleanImageUrl}`;
       }

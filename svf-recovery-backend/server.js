@@ -3,8 +3,6 @@
 // global.logImportant = (...args) => {
 //   console.info("[IMPORTANT]", ...args);
 // };
-
-const cluster = require("cluster");
 const express = require("express");
 const mysql = require("mysql2");
 const cors = require("cors");
@@ -2628,7 +2626,7 @@ app.get(
   })
 );
 
-app.get("/settings-visits/:username", async (req, res) => {
+app.get("/api/settings-visits/:username", async (req, res) => {
   const { username } = req.params;
 
   try {

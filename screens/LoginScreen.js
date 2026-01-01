@@ -26,10 +26,10 @@ const LoginScreen = () => {
       return;
     }
 
-    setIsLoading(true);
-
+    setIsLoading(true);    
     try {
       const result = await login(username, password);
+      console.log(`user name is ${username} and password is ${password}`)
       
       if (result.success) {
         console.log('Login successful, navigating to main app...');

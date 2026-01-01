@@ -12,10 +12,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "tailwind-react-native-classnames";
 import { Ionicons } from "@expo/vector-icons";
-import DetailedCust from "../customers/DetailedCust";
+// import DetailedCust from "../customers/DetailedCust";
 import { useAuth } from "../context/AuthContext";
 
-const SERVER_IP = "192.168.65.11";
+const SERVER_IP = "192.168.65.11"
 const BASE_URL = `http://${SERVER_IP}:3000`;
 
 const Settings = () => {
@@ -41,7 +41,7 @@ const Settings = () => {
     try {
       setLoading(true);
       const response = await fetch(
-        `${BASE_URL}/settings-visits/${user.username}`
+        `${BASE_URL}/api/settings-visits/${user.username}`
       );
 
       if (!response.ok) {
@@ -186,7 +186,7 @@ const Settings = () => {
       </View>
 
       {/* DetailedCust Modal */}
-      <Modal
+      {/* <Modal
         animationType="slide"
         transparent={true}
         visible={detailModalVisible}
@@ -196,7 +196,7 @@ const Settings = () => {
           person={selectedPerson}
           onClose={() => setDetailModalVisible(false)}
         />
-      </Modal>
+      </Modal> */}
     </SafeAreaView>
   );
 };
