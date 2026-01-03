@@ -1717,9 +1717,6 @@ app.post(
         pt_no,
         response_type,
         response_description,
-        image_url,
-        latitude,
-        longitude,
       } = req.body;
 
       console.log("Saving individual response for agent:", agentId);
@@ -1748,7 +1745,7 @@ app.post(
         });
       }
 
-      // NEW LOGIC: Only require description if response is "Others"
+      // Only require description if response is "Others"
       if (
         response_type === "Others" &&
         (!response_description || !response_description.trim())
@@ -1756,15 +1753,6 @@ app.post(
         return res.status(400).json({
           success: false,
           message: "Description is required for 'Others' response",
-        });
-      }
-
-      // Generate location coordinates if available
-      let location_coordinates = null;
-      if (latitude && longitude) {
-        location_coordinates = JSON.stringify({
-          latitude: parseFloat(latitude),
-          longitude: parseFloat(longitude),
         });
       }
 
@@ -1792,21 +1780,21 @@ app.post(
         const device_id = req.headers["user-agent"] || "mobile-app";
 
         const validatePTQuery = `
-  SELECT tac.pt_no, taa.no_of_visit
-  FROM tbl_auction_customers tac
-  INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
-  WHERE tac.customer_id = ? 
-    AND tac.pt_no = ?
-    AND taa.assigned_agent_id = ?
-    AND taa.is_closed = 0
-    AND taa.no_of_visit = (
-      SELECT MAX(taa2.no_of_visit)
-      FROM tbl_assigned_agents AS taa2
-      WHERE taa2.pt_no = taa.pt_no 
-      AND taa2.assigned_agent_id = ?
-    )
-  LIMIT 1
-`;
+          SELECT tac.pt_no, taa.no_of_visit
+          FROM tbl_auction_customers tac
+          INNER JOIN tbl_assigned_agents taa ON tac.pt_no = taa.pt_no
+          WHERE tac.customer_id = ? 
+            AND tac.pt_no = ?
+            AND taa.assigned_agent_id = ?
+            AND taa.is_closed = 0
+            AND taa.no_of_visit = (
+              SELECT MAX(taa2.no_of_visit)
+              FROM tbl_assigned_agents AS taa2
+              WHERE taa2.pt_no = taa.pt_no 
+              AND taa2.assigned_agent_id = ?
+            )
+          LIMIT 1
+        `;
 
         dbSafe.query(
           validatePTQuery,
@@ -1827,7 +1815,7 @@ app.post(
               });
             }
 
-            // NEW LOGIC: Determine what to store in response_text and response_description
+            // Determine what to store in response_text and response_description
             let finalResponseText = response_type;
             let finalResponseDescription = response_description;
 
@@ -1838,17 +1826,16 @@ app.post(
               finalResponseDescription = response_description;
             } else {
               finalResponseText = response_type;
-
               finalResponseDescription = response_description || "";
             }
 
             // Check if response already exists for this PT number
             const checkExistingQuery = `
-          SELECT entry_id, image_url, response_description
-          FROM tbl_recovery_responses 
-          WHERE pt_no = ? AND agent_id = ? AND customer_id = ?
-          LIMIT 1
-        `;
+              SELECT entry_id, image_url, response_description
+              FROM tbl_recovery_responses 
+              WHERE pt_no = ? AND agent_id = ? AND customer_id = ?
+              LIMIT 1
+            `;
 
             dbSafe.query(
               checkExistingQuery,
@@ -1862,15 +1849,11 @@ app.post(
                   });
                 }
 
-                let finalImageUrl = image_url;
-
                 if (checkResults.length > 0) {
-                  // UPDATE existing response
+                  // UPDATE existing response - ONLY update text, description, and timestamp
                   const existingResponse = checkResults[0];
-                  if (!finalImageUrl && existingResponse.image_url) {
-                    finalImageUrl = existingResponse.image_url; // Preserve existing image
-                  }
-
+                  
+                  // Preserve existing description for non-"Others" responses if new description is empty
                   if (
                     (!finalResponseDescription ||
                       finalResponseDescription.trim() === "") &&
@@ -1883,25 +1866,21 @@ app.post(
                   }
 
                   const updateQuery = `
-              UPDATE tbl_recovery_responses 
-              SET response_text = ?, response_description = ?, 
-                  response_timestamp = ?, image_url = ?, location_coordinates = ?,
-                  completed_date = ?, device_id = ?
-              WHERE entry_id = ?
-            `;
+                    UPDATE tbl_recovery_responses 
+                    SET response_text = ?, 
+                        response_description = ?, 
+                        response_timestamp = ?
+                    WHERE entry_id = ?
+                  `;
 
                   const values = [
                     finalResponseText,
                     finalResponseDescription,
                     new Date(),
-                    finalImageUrl,
-                    location_coordinates,
-                    new Date(),
-                    device_id,
                     existingResponse.entry_id,
                   ];
 
-                  console.log("Updating existing individual response:", values);
+                  console.log("Updating existing individual response (text/description/timestamp only):", values);
 
                   dbSafe.query(
                     updateQuery,
@@ -1944,20 +1923,20 @@ app.post(
                             pt_numbers: [pt_no],
                             customer_id: customer_id,
                             updated: true,
+                            updated_fields: ["response_text", "response_description", "response_timestamp"]
                           });
                         }
                       );
                     }
                   );
                 } else {
-                  // INSERT new individual response
+                  // add new individual response - only text and description (no image/location)
                   const insertQuery = `
-              INSERT INTO tbl_recovery_responses 
-              (pt_no, customer_id, agent_id, response_text, response_description, 
-               response_timestamp, image_url, location_coordinates, completed_date, 
-               device_id, branch_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `;
+                    INSERT INTO tbl_recovery_responses 
+                    (pt_no, customer_id, agent_id, response_text, response_description, 
+                     response_timestamp, completed_date, device_id, branch_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  `;
 
                   const values = [
                     pt_no,
@@ -1966,14 +1945,12 @@ app.post(
                     finalResponseText,
                     finalResponseDescription,
                     new Date(),
-                    finalImageUrl,
-                    location_coordinates,
                     new Date(),
                     device_id,
                     branch_id,
                   ];
 
-                  console.log("Inserting new individual response:", values);
+                  console.log("Inserting new individual response (no image/location):", values);
 
                   dbSafe.query(
                     insertQuery,

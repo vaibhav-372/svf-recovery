@@ -21,7 +21,7 @@ import MapWebView from "./MapWebView";
 import ImageViewing from "react-native-image-viewing";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+// import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 const { height } = Dimensions.get("window");
 
@@ -43,6 +43,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
   const [checkingExisting, setCheckingExisting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [imageError, setImageError] = useState(false);
+  // const [showMapView, setShowMapView] = useState(false);
 
   const { token } = useAuth();
   const SERVER_IP = "192.168.65.11";
@@ -85,7 +86,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     setImageError(false);
   };
 
-  // STEP 1: Check if customer is already visited
+  // Check if customer is already visited
   const checkCustomerStatus = async () => {
     try {
       const customerId = person.customer_id || person.entry_id;
@@ -250,12 +251,12 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
     }
   };
 
-  // STEP 2: Handle response selection
+  // Handle response selection
   const handleResponseSelect = (value) => {
     setSelectedResponse(value);
   };
 
-  // STEP 3: Handle image capture
+  // Handle image capture
   const handleCapture = (data) => {
     if (isAlreadyVisited) {
       Alert.alert(
@@ -577,13 +578,12 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           </TouchableOpacity>
         </View>
 
-        <KeyboardAwareScrollView
+        <ScrollView
           style={tw`px-2`}
           showsVerticalScrollIndicator={false}
-          enableOnAndroid={true}
-          extraScrollHeight={100}
+          nestedScrollEnabled={true}
+          scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
-          enableResetScrollToCoords={false}
         >
           <Text
             style={[
@@ -755,6 +755,16 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                       Failed to load image
                     </Text>
                   )}
+                  {/* {!showMapView && capturedImage?.location && (
+                    <TouchableOpacity
+                      onPress={() => setShowMapView(true)}
+                      style={tw`bg-blue-50 p-3 rounded-lg mb-4 items-center`}
+                    >
+                      <Text style={tw`text-blue-600`}>
+                        Tap to view location map
+                      </Text>
+                    </TouchableOpacity>
+                  )} */}
                 </View>
               </TouchableOpacity>
             </View>
@@ -784,7 +794,7 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
           )}
 
           {/* Location */}
-          {capturedImage?.location && (
+          {/* {capturedImage?.location && (
             <View style={tw`mb-4`}>
               <Text
                 style={[
@@ -796,15 +806,31 @@ const DetailedCust = ({ person, onClose, onResponseSaved }) => {
                   ? "Previously Captured Location"
                   : "Location Captured"}
               </Text>
-              <MapWebView
-                latitude={capturedImage.location.latitude}
-                longitude={capturedImage.location.longitude}
-              />
+              {showMapView && capturedImage?.location && (
+                <View style={tw`mb-4`}>
+                  <Text
+                    style={[
+                      tw`text-center text-lg font-semibold mb-2`,
+                      { color: "#7cc0d8" },
+                    ]}
+                  >
+                    {isAlreadyVisited
+                      ? "Previously Captured Location"
+                      : "Location Captured"}
+                  </Text>
+                  <View style={{ height: 300 }}>
+                    <MapWebView
+                      latitude={capturedImage.location.latitude}
+                      longitude={capturedImage.location.longitude}
+                    />
+                  </View>
+                </View>
+              )}
             </View>
-          )}
+          )} */}
 
           <View style={tw`mb-32`} />
-        </KeyboardAwareScrollView>
+        </ScrollView>
 
         <View
           style={tw`absolute bottom-5 left-4 right-4 flex-row justify-between`}

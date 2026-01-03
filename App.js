@@ -1,5 +1,5 @@
 // App.js
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import Customers from "./customers/Customers";
+import NativeErrorHandler from "./NativeErrorHandler";
 
 const Stack = createNativeStackNavigator();
 
@@ -31,11 +32,9 @@ const LoadingScreen = () => (
       source={require("./assets/kohli.webp")}
       style={{ width: 140, height: 140, borderRadius: 50, marginBottom: 20 }}
     />
-    <Text style={{ fontSize: 20, fontWeight: "bold", color: "#7cc0d8" }}>SVF RECOVERY</Text>
-    {/* <ActivityIndicator size="large" color="#7cc0d8" />
-    <Text style={{ marginTop: 10, color: "#7cc0d8", fontSize: 16 }}>
-      Loading...
-    </Text> */}
+    <Text style={{ fontSize: 20, fontWeight: "bold", color: "#7cc0d8" }}>
+      SVF RECOVERY
+    </Text>
   </View>
 );
 
@@ -199,8 +198,8 @@ const AppNavigator = () => {
 };
 
 const NavigationContainerWithErrorHandling = ({ children }) => {
-  const [navigationReady, setNavigationReady] = React.useState(false);
-  const [navigationError, setNavigationError] = React.useState(null);
+  const [navigationReady, setNavigationReady] = useState(false);
+  const [navigationError, setNavigationError] = useState(null);
 
   const handleNavigationReady = () => {
     setNavigationReady(true);
@@ -248,12 +247,11 @@ const NavigationContainerWithErrorHandling = ({ children }) => {
 
 // Enhanced App component with better initialization
 export default function App() {
-  const [appReady, setAppReady] = React.useState(false);
-  const [appError, setAppError] = React.useState(null);
-  const [initializationStep, setInitializationStep] =
-    React.useState("Starting...");
+  const [appReady, setAppReady] = useState(false);
+  const [appError, setAppError] = useState(null);
+  const [initializationStep, setInitializationStep] = useState("Starting...");
 
-  React.useEffect(() => {
+  useEffect(() => {
     let mounted = true;
 
     const initializeApp = async () => {
@@ -261,18 +259,22 @@ export default function App() {
         console.log("App initialization started");
         setInitializationStep("Initializing app...");
 
-        // Remove the timeout race condition and use simpler initialization
+        // Initialize NativeErrorHandler
+        setInitializationStep("Setting up error handling...");
+        NativeErrorHandler.init();
+
+        // Check for Android issues
+        const androidIssues = NativeErrorHandler.checkAndroidIssues();
+        if (androidIssues.length > 0) {
+          console.log("Android issues detected:", androidIssues);
+        }
+
         // Just simulate a short loading time
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         if (!mounted) return;
 
         setInitializationStep("Setting up services...");
-
-        // Add any actual initialization logic here
-        // For example:
-        // await initializeDatabase();
-        // await loadCachedData();
 
         if (!mounted) return;
 
@@ -289,38 +291,10 @@ export default function App() {
 
     initializeApp();
 
-    // Set up global error handler (React Native way)
-    const errorHandler = (error, isFatal) => {
-      console.log("Global Error Handler:", error, isFatal);
-      if (isFatal && mounted) {
-        setAppError("A fatal error occurred");
-      }
-    };
-
-    // Set the global error handler
-    if (global.ErrorUtils) {
-      const originalHandler = global.ErrorUtils.getGlobalHandler();
-      global.ErrorUtils.setGlobalHandler((error, isFatal) => {
-        errorHandler(error, isFatal);
-        if (originalHandler) {
-          originalHandler(error, isFatal);
-        }
-      });
-    }
-
-    // Handle promise rejections to prevent unhandled promise warnings
-    const handlePromiseRejection = (event) => {
-      console.log("Unhandled Promise Rejection:", event);
-      // You can handle promise rejections here if needed
-    };
-
     // Cleanup function
     return () => {
       mounted = false;
-      // Restore original error handler if needed
-      if (global.ErrorUtils && global.ErrorUtils.getGlobalHandler) {
-        // Note: In practice, you might want to keep your handler
-      }
+      NativeErrorHandler.cleanup();
     };
   }, []);
 
@@ -344,10 +318,10 @@ export default function App() {
             marginBottom: 20,
           }}
         />
-        {/* <ActivityIndicator size="large" color="#7cc0d8" />
+        <ActivityIndicator size="large" color="#7cc0d8" />
         <Text style={{ marginTop: 10, color: "#7cc0d8", fontSize: 16 }}>
           {initializationStep}
-        </Text> */}
+        </Text>
       </View>
     );
   }
